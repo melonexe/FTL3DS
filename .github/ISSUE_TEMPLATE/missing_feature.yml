@@ -1,0 +1,31 @@
+name: Missing feature
+description: Something from FTL that isn't in FTL3DS yet (or an idea for the 3DS version)
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the README's **What's missing** list first; the bigger gaps are already known.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What's missing?
+      description: What FTL does (or what you'd like), as precisely as you can.
+      placeholder: In FTL, events can send enemy boarders onto your ship before a fight...
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: How FTL does it
+      description: Numbers and rules matter. Links to the FTL wiki or other sources are very welcome.
+
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - "No, just reporting"
+        - "Yes, I'd like to try (a pull request)"

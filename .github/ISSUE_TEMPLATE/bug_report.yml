@@ -1,0 +1,107 @@
+name: Bug report
+description: Something broke, crashed or doesn't work like FTL
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! FTL3DS is a work in progress, so the more detail the better.
+        **Never attach `ftl.dat`** or files extracted from it.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What went wrong, and what you expected instead (if it's "FTL does it differently", say how FTL does it).
+      placeholder: The game froze when my crew boarded the enemy ship...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: Steps to reproduce, if you know them. "It happened once" is fine too.
+      placeholder: |
+        1. Start a run with the Kestrel A on Normal
+        2. Teleport two crew to the enemy shields room
+        3. ...
+
+  - type: input
+    id: ship
+    attributes:
+      label: Ship, type and difficulty
+      placeholder: Engi Cruiser B, Hard (or Sandbox)
+
+  - type: input
+    id: where
+    attributes:
+      label: Where in the run
+      description: Sector number, and what was going on (a fight, an event, a store, the map, a menu...)
+      placeholder: Sector 4, fighting a Mantis ship in an asteroid field
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem?
+      options:
+        - Crash or freeze
+        - Wrong game behaviour (rules, numbers, events)
+        - Graphics or text
+        - Sound or music
+        - Controls or touch screen
+        - Slowdown
+        - Installing (FTL2CIA, CIA, .3dsx)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Running on
+      options:
+        - New 3DS / New 3DS XL / New 2DS XL
+        - 3DS / 3DS XL / 2DS
+        - Emulator (Azahar, Citra...)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - CIA made with FTL2CIA
+        - Release CIA + ftl.dat on the SD card
+        - .3dsx from the Homebrew Launcher
+        - Built it myself
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: FTL3DS version
+      description: The release you downloaded (e.g. 2026.10.10), or the commit if you built it.
+    validations:
+      required: true
+
+  - type: input
+    id: ftl
+    attributes:
+      label: Your copy of FTL
+      description: Where it's from and its version (unmodded ftl.dat only, please).
+      placeholder: Steam, 1.6.14
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Photos or screenshots
+      description: A photo of the screens helps a lot, especially for crashes (Luma's crash screen too). Drag images here.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: e.g. your save or profile from sdmc:/3ds/ftl3ds/ if it happens every time with it (zip it first).

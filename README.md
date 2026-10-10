@@ -34,78 +34,29 @@ file named `3ds/dspfirm.cdc` enables sound.
 
 ## What's in the game
 
-**Menus and saving.** FTL's main menu: CONTINUE, NEW GAME, SANDBOX, STATS, OPTIONS, QUIT. The
-hangar picks the ship, its type (A/B/C) and the difficulty (easy / normal / hard: starting scrap,
-rewards, enemy strength and targeting as in FTL). The game saves whenever the ship is at rest and
-CONTINUE resumes there; the run's end deletes the save. START pauses (resume, options with music
-and effects volume, main menu, quit).
+A full FTL run: the hangar (every ship and A/B/C layout, easy / normal / hard), eight sectors with
+FTL's own events, stores, upgrades and equipment, every system, weapon, drone and augment, crew
+with skills, boarding, environmental hazards, and the rebel flagship in the Last Stand. Ship
+unlocks and achievements work as in FTL. There's also a SANDBOX mode (any ship with any weapons,
+drones and augments; no unlocks). Numbers come from the FTL wiki, Mike Hopley's measurements and
+xftl's reverse engineering; the few no source gives are marked as our own choice in the code.
 
-**Runs.** Eight sectors on FTL's sector map, each a map of beacons generated the way FTL does it
-(xftl's notes), with FTL's own event scripts from `ftl.dat`: text, choices (blue options for a
-system, crew race, weapon or augment you have), rewards from FTL's loot tables, crew joining or
-leaving (a clone bay can save some), damage, hostile and friendly ships, quests and stores.
-Jumping costs 1 fuel and the rebel fleet advances each turn (slower in nebulas); with no fuel, WAIT.
-- **The map** marks what FTL marks (wiki: Beacon): the exit always, quests from any distance,
-  stores and distress beacons once you've been next to them. Long-Ranged Scanners add ships and
-  hazards at neighbouring beacons; nebulas show as clouds.
-- **Stores** have FTL's sections (systems, weapons, drones, augments, crew; layout rules from
-  xftl), stock from the sector's loot table, fuel, missiles, drone parts, hull repair and a SELL
-  tab at half price. Each store remembers its stock, so you can go back. Crew for hire may come
-  trained, more often later in the run (our numbers: the wiki gives none).
-- **Ships at beacons:** an event's ship is in view while its text is up; one that surrenders or
-  makes peace, or whose crew you killed, stays until you jump. Enemies surrender or try to escape
-  at their scripted hull thresholds, and an escaping ship charges its FTL drive.
-- **Enemies** are built with FTL's generator as reverse-engineered by xftl: power pools by sector
-  and difficulty, optional systems, and weapons drawn from each race's list to fill the weapons
-  system's power.
-- **The SHIP menu** (locked in a fight, with intruders aboard or in a dangerous hazard) has
-  upgrades at FTL's costs and equipment: weapon and drone slots, augments and a 4-slot cargo hold.
-- **Hazards** (wiki: Environmental Hazards; xftl): asteroid fields, suns (solar flares), pulsars
-  (ion pulses), anti-ship batteries, nebulas (blinded sensors, drifting clouds on screen) and ion
-  storms (half the reactor). A badge names the hazard and counts down; with a hazard the FTL drive
-  has to charge even without an enemy.
-- **The Last Stand** (wiki: The Rebel Flagship; xftl FlagshipBoss): the flagship heads for the
-  Federation base, jumping every second turn; three turns there and the run is lost. Its three
-  stages: four weapon rooms with hacking and cloaking; drones and power surges; a 12-point Zoltan
-  shield, teleporter and mind control with laser surges. Its crew carries over; with them all dead
-  its AI flies it. Beating stage 3 wins.
+## What's missing
 
-**Combat.** Your ship on the top screen, the enemy in a panel beside it.
-- **Weapons:** lasers, missiles, ion, beams, flak, bombs, chain and charge weapons, stun, lockdown
-  and healing bombs, with the game's stats, art and sounds and Mike Hopley's measured speeds.
-  Shields stop shots layer by layer; missiles and bombs ignore them; beams lose a point per layer.
-  Hit or miss is decided as a shot arrives (so cloaking dodges shots already on their way).
-- **Systems:** shields, engines, piloting, oxygen, medbay or clone bay, sensors, doors, weapons,
-  drones, cloaking, backup battery, teleporter, hacking, mind control and artillery, each with
-  FTL's numbers.
-- **Drones:** combat, defence, anti-drone, hull repair, shield, crew repair, anti-personnel,
-  boarding and ion intruder drones.
-- **Boarding:** teleport crew over and back; crew fight hand to hand and sabotage systems; enemy
-  ships board you and recall hurt boarders; killing the whole crew wins without the explosion.
-- **Augments:** every obtainable augment works, including each ship's own.
-- **Crystal crew** can lock a room down; **Zoltan crew** power the system they stand in.
+- **The tutorial.**
+- **The secret Crystal sector** (so the Ancestry achievement can't be earned).
+- **Some event scripting:**
+  - `<boarders>`: events where enemy boarders beam aboard (58 uses in FTL's events) do nothing.
+  - `<status>`: events that limit or damage your systems for the fight (79 uses) are ignored.
+  - `<crew>` and `<weaponOverride>` on event ships: their scripted crew and weapons are
+    generated randomly instead.
+  - `<fleet>` backdrops (the rebel fleet behind you), `<repair>` and `<secretSector>`.
+- **Languages:** English text only; FTL's translations aren't loaded.
+- **Mods:** Slipstream / Hyperspace mods aren't supported (use an unmodded `ftl.dat`).
+- **A 3D home-menu banner:** tried, but it crashed the real HOME Menu; the CIA has a flat one.
 
-**Crew.** Named from the game's lists; they walk, man stations, repair, fight fires, seal
-breaches, suffocate and heal. Skills train as in FTL (wiki: Crew skills) and raise the manning
-bonuses; cloning keeps 80% of the experience. Each room has its own oxygen (open doors share air;
-airlocks, breaches and Lanius drain it; fires burn it); fires spread, damage and burn out.
-
-**Unlocks and achievements.** Ships unlock as in FTL (wiki: Ships): the Kestrel at first; the
-Engi on reaching sector 5 with it; other ships from their quests or by beating the flagship with
-the ship before them; Type B from two of a ship's three achievements, Type C by reaching sector 8
-with Type B; the Lanius after four ships, the Crystal after A and B wins with every other ship. All
-of FTL's achievements are tracked, with popups and a list under STATS.
-
-**Sandbox.** SANDBOX on the main menu opens the hangar with every ship unlocked, then a loadout
-screen where each weapon, drone and augment slot can hold anything in the game (the weapons system
-grows to power it). Sandbox runs earn no achievements or unlocks.
-
-**On the 3DS.** FTL's own bitmap fonts at 1:1 pixels, the game's music (explore and battle
-versions crossfading) and effects, stereoscopic 3D (stars behind, readouts in front), and assets
-loaded and freed as needed to fit the 3DS's memory.
-
-**Not there yet:** the tutorial, the secret Crystal sector (so Ancestry can't be earned), and a 3D
-home-menu banner (tried; it crashed the real HOME Menu, so the CIA has a flat banner).
+Some details are our own choices where no source gives FTL's (door and jump animation speeds,
+trained crew in stores, a few rates), and play is mostly by touch.
 
 ## Controls
 
@@ -129,14 +80,6 @@ the top-left buttons are SHIP and JUMP.
 | START | Pause menu |
 | SELECT | Debug menu (any ship and enemy, quick actions) |
 | L + R + Y / L + R + B | Debug: fire and breach on your ship / destroy the enemy |
-
-## Where the numbers come from
-
-The FTL wiki (ftl.fandom.com), Mike Hopley's measurements (mikehopley.github.io) and xftl's reverse
-engineering (gitlab.com/znixian/xftl): repair takes 12.5 s per bar for a Human, crew walk 2.2
-tiles/s, shield layers recharge in 2 s, oxygen refills at 1.2 / 4.8 / 8.4 % per second, and so on.
-The few values no source gives (door animation speed, the jump animation, some rates) are marked as
-our own choice where they're defined.
 
 ## Building
 

@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Questions and chat (Discord)
+    url: https://discord.gg/vP9u78qRs
+    about: Help installing, questions and general chat. Bugs and missing features go in an issue here.
   - name: Setting up a hacked 3DS (custom firmware, FBI, Homebrew Launcher, sound firmware)
     url: https://3ds.hacks.guide/
     about: Problems getting homebrew running at all belong to the 3DS hacking guide, not here.

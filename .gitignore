@@ -40,3 +40,6 @@ tools/cia/icon.png
 # Build listings and local tool settings
 *.lst
 .claude/
+
+# Local notes
+DISCORD_SETUP.md

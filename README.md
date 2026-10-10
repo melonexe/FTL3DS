@@ -15,6 +15,9 @@ This is an unofficial fan project and still a work in progress: expect bugs, rou
 odd crash, and don't expect it to match FTL perfectly yet (see [What's missing](#whats-missing)).
 Back up your SD card's `3ds/ftl3ds/` folder if you care about your saves.
 
+**Chat, help and news:** join the [FTL3DS Discord](https://discord.gg/vP9u78qRs). Bugs are best
+reported as GitHub issues, so they don't get lost.
+
 **Contributions are welcome:** bug reports (what happened, which ship and sector, a photo helps),
 fixes, and work on anything in the missing list. If you open a pull request, never include
 `ftl.dat` or anything extracted from it.

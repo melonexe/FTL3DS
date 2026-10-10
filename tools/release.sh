@@ -41,6 +41,8 @@ Your 3DS needs custom firmware: set it up with https://3ds.hacks.guide/ first. T
 installs FBI and the sound firmware homebrew needs (if the game says "No sound", see the guide).
 
 Saves and progress are kept in sdmc:/3ds/ftl3ds/.
+
+Help, questions and news: https://discord.gg/vP9u78qRs
 EOF
 
 # Nothing of Subset Games' may ride along: no ftl.dat, and the CIA's romfs must be the empty one.

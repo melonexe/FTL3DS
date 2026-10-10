@@ -88,6 +88,9 @@
             return best;
         }
         if (!strcmp(n, "menu")) return sMenu;
+        if (!strcmp(n, "sandbox")) return sRun.sandbox;
+        if (!strcmp(n, "weapons")) return PLAYER_SHIP->weaponCount;
+        if (!strcmp(n, "visitor")) return sVisitor;
         if (!strcmp(n, "fps")) return 1.0f / sTestFrameTime;
         if (!strcmp(n, "cpums")) return C3D_GetProcessingTime();  // last frame: building it, then the GPU drawing it
         if (!strcmp(n, "gpums")) return C3D_GetDrawingTime();

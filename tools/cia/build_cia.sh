@@ -1,15 +1,15 @@
 #!/bin/sh
-# Builds ftl3ds.cia for testing on a 3DS, with your own ftl.dat inside its romfs.
-#   tools/cia/build_cia.sh "<path to ftl.dat>"
-# Run `make` first (it uses ftl3ds.elf). The CIA contains your ftl.dat and FTL's art: keep it to
-# yourself.
+# Builds a CIA. Run `make` first (it uses ftl3ds.elf).
 #
-# Home-menu art: with Python's pillow, pefile, gltflib, numpy and soundfile installed, the icon is
-# FTL's own (from FTLGame.exe next to ftl.dat) and the banner is 3D, built from the game's art
-# (make_banner3d.py, converted with pycgfx, fetched on first use): the FTL logo spinning in front of
-# a nebula. BANNER3D=full builds the whole scene instead (still crashes a real 3DS's home menu) and
-# BANNER3D=tested uses the static logo banner first tested on hardware. Without those Python
-# modules a generated starfield icon and flat banner are used (make_art.py).
+#   PUBLIC=1 tools/cia/build_cia.sh
+#       ftl3ds_public.cia, for sharing: nothing of FTL's inside (an empty romfs, the generated
+#       starfield icon and banner from make_art.py). Players put their own ftl.dat on the SD card
+#       at sdmc:/3ds/ftl3ds/ftl.dat.
+#
+#   tools/cia/build_cia.sh "<path to ftl.dat>"
+#       ftl3ds.cia, a personal build: your ftl.dat inside its romfs and FTL's own icon (from
+#       FTLGame.exe next to ftl.dat, needs Python's pefile and pillow). It contains Subset Games'
+#       files: keep it to yourself.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -18,39 +18,52 @@ EXE="$(dirname "$DAT")/FTLGame.exe"
 cd "$HERE"
 BT=./bt/windows-x86_64/bannertool.exe
 
-mkdir -p romfs
-if [ ! -f romfs/ftl.dat ] || [ "$DAT" -nt romfs/ftl.dat ]; then cp "$DAT" romfs/ftl.dat; fi
+if [ "$PUBLIC" = 1 ]; then
+    ROMFS=romfs_public  # no ftl.dat: the game reads the player's own from the SD card
+    OUT="$ROOT/ftl3ds_public.cia"
+    mkdir -p "$ROMFS"
+    rm -f "$ROMFS"/*
+    echo "Public build: no ftl.dat or FTL art inside." > "$ROMFS/README.txt"
+else
+    ROMFS=romfs
+    OUT="$ROOT/ftl3ds.cia"
+    mkdir -p romfs
+    if [ ! -f romfs/ftl.dat ] || [ "$DAT" -nt romfs/ftl.dat ]; then cp "$DAT" romfs/ftl.dat; fi
+fi
 
 python make_art.py
 ICON=icon.png
 BANNER="-i banner.png -a banner.wav"
+SMDH_FLAGS="visible,allow3d,recordusage"
 if [ ! -d pycgfx ]; then
     curl -sL https://github.com/skyfloogle/pycgfx/archive/refs/heads/main.zip -o pycgfx.zip &&
         unzip -q -o pycgfx.zip && mv pycgfx-main pycgfx && rm -f pycgfx.zip || true
 fi
-if [ "$BANNER3D" = full ]; then
-    VARIANT=full LAYERS=planet,rebels,logo,kestrel
-else
-    VARIANT=spin LAYERS=logo  # two materials, as in the banner tested on hardware
-fi
-if [ -f "$EXE" ] && [ -d pycgfx ] &&
-    BANNER_VARIANT=$VARIANT BANNER_LAYERS=$LAYERS python make_banner3d.py romfs/ftl.dat "$EXE" pycgfx banner3d; then
-    ICON=banner3d/icon.png
-    if [ "$BANNER3D" = tested ] && [ -f banner3d/banner_logo_tested.cgfx ]; then
-        BANNER="-ci banner3d/banner_logo_tested.cgfx -a banner.wav"
-    elif [ "$BANNER3D" = full ]; then
-        BANNER="-ci banner3d/banner.cgfx -a banner3d/banner.wav"
-    else
-        BANNER="-ci banner3d/banner.cgfx -a banner.wav"  # the short jingle known to work
+# The home-menu banner is the flat one (banner.png from make_art.py); the icon is FTL's own, taken
+# from FTLGame.exe by make_banner3d.py. 3D banners (make_banner3d.py) crashed a real 3DS's home
+# menu and are shelved: BANNER3D=full / spin / tested still build them, for testing only.
+if [ "$PUBLIC" = 1 ]; then
+    :  # the generated art only
+elif [ -n "$BANNER3D" ]; then
+    if [ "$BANNER3D" = full ]; then VARIANT=full LAYERS=planet,rebels,logo,kestrel; else VARIANT=spin LAYERS=logo; fi
+    if [ -f "$EXE" ] && [ -d pycgfx ] &&
+        BANNER_VARIANT=$VARIANT BANNER_LAYERS=$LAYERS python make_banner3d.py romfs/ftl.dat "$EXE" pycgfx banner3d; then
+        ICON=banner3d/icon.png
+        SMDH_FLAGS="visible,allow3d,recordusage,extendedbanner"
+        if [ "$BANNER3D" = tested ] && [ -f banner3d/banner_logo_tested.cgfx ]; then
+            BANNER="-ci banner3d/banner_logo_tested.cgfx -a banner.wav"
+        else
+            BANNER="-ci banner3d/banner.cgfx -a banner.wav"
+        fi
     fi
-else
-    echo "3D banner not built: using the generated art"
+elif [ -f "$EXE" ] && BANNER_ICON_ONLY=1 python make_banner3d.py romfs/ftl.dat "$EXE" pycgfx banner3d; then
+    ICON=banner3d/icon.png
 fi
 
 $BT makebanner $BANNER -o banner.bnr
 $BT makesmdh -s "FTL 3DS" -l "FTL: Faster Than Light (engine port, test build)" -p "Subset Games / FTL-port" \
-    -i "$ICON" -o icon.smdh
+    -f "$SMDH_FLAGS" -i "$ICON" -o icon.smdh
 
-./makerom.exe -f cia -o "$ROOT/ftl3ds.cia" -elf "$ROOT/ftl3ds.elf" -rsf ftl3ds.rsf \
-    -icon icon.smdh -banner banner.bnr -target t -DAPP_ROMFS=romfs -major 0 -minor 1 -micro 0
-ls -l "$ROOT/ftl3ds.cia"
+./makerom.exe -f cia -o "$OUT" -elf "$ROOT/ftl3ds.elf" -rsf ftl3ds.rsf \
+    -icon icon.smdh -banner banner.bnr -target t -DAPP_ROMFS="$ROMFS" -major 0 -minor 1 -micro 0
+ls -l "$OUT"

@@ -814,12 +814,11 @@ static bool sFighting;  // an enemy is here and the fight is on
 static bool sMapOpen, sStoreOpen;
 static bool sSectorMapOpen;  // choosing the next sector
 static int sSectorPick = -1, sNextRow;
-static int sStoreBeacon = -1;
 
 // The FTL jump: the ship streaks off to the right, a white flash, then it flies in from the left
 // at the new beacon. Timings are our choice (no source gives FTL's).
-#define JUMP_OUT 1.0f
-#define JUMP_IN 0.8f
+#define JUMP_OUT 0.7f
+#define JUMP_IN 0.5f
 static float sJumpTime = -1.0f;  // seconds into the jump, or < 0
 // The FTL drive's charge (0..1) during a fight; outside fights it's ready at once. Seconds to
 // charge by engine power: unmanned, then manned by engines skill 0/1/2 (wiki: Engines, "FTL Drive
@@ -2809,7 +2808,7 @@ static void ftl_button(float x, float y, float w, float h, bool lit, const char*
 // only when no fuel can be bought there (none left, or not enough scrap), so a run can't get stuck.
 static bool map_can_wait(const Run* r) {
     if ((r->fuel > 0 && !r->lastStand) || sFighting) return false;
-    if (r->current != sStoreBeacon) return true;
+    if (r->beacons[r->current].storeSlot <= 0) return true;
     return r->storeFuel <= 0 || r->scrap < run_price(r, STORE_FUEL);
 }
 
@@ -2890,10 +2889,20 @@ static void draw_run_map(const Run* r) {
                 draw_text(lx + 2, y + 7, 0.32f, scanShip ? C2D_Color32(255, 120, 100, 255) : C2D_Color32(255, 200, 90, 255), scan);
             }
         }
-        const char* tag = b->exit ? "EXIT" : i == sStoreBeacon ? "STORE" : b->quest && !b->visited ? "QUEST" : NULL;
+        // What FTL marks (wiki: Beacon): the exit always; quests from any distance; stores and
+        // distress beacons once we've been next to them (stores stay marked, distress until visited).
+        bool near = b->visited || map_next_to_seen(r, i);
+        bool store = near && run_beacon_store(r, i);
+        const char* tag = b->exit                                   ? "EXIT"
+                          : store                                   ? "STORE"
+                          : b->quest && !b->visited                 ? "QUEST"
+                          : near && run_beacon_distress(r, i)       ? "DISTRESS"
+                                                                    : NULL;
         if (tag) {
-            u32 tc = b->exit ? C2D_Color32(120, 255, 140, 255) : b->quest && i != sStoreBeacon ? C2D_Color32(120, 200, 255, 255)
-                                                                                                : C2D_Color32(255, 220, 120, 255);
+            u32 tc = b->exit                   ? C2D_Color32(120, 255, 140, 255)
+                     : store                   ? C2D_Color32(255, 220, 120, 255)
+                     : b->quest && !b->visited ? C2D_Color32(120, 200, 255, 255)
+                                               : C2D_Color32(255, 140, 110, 255);
             // Right of the beacon, or left of it if that would run past the map's edge.
             float lw = font_width(0.36f, tag) + 4, lx = x + 6;
             float mapRight = RMAP_X + 660 * RMAP_S;
@@ -2958,7 +2967,7 @@ static void draw_run_map(const Run* r) {
     if (map_can_wait(r))
         ftl_button(MAP_ACT_X, MAP_ACT_Y, BOT_W - MAP_ACT_X - 2, 20, true, "WAIT");
     else if (cur->exit) ftl_button(MAP_ACT_X, MAP_ACT_Y, BOT_W - MAP_ACT_X - 2, 20, true, "NEXT SECTOR");
-    else if (r->current == sStoreBeacon) ftl_button(MAP_ACT_X, MAP_ACT_Y, BOT_W - MAP_ACT_X - 2, 20, true, "STORE");
+    else if (cur->storeSlot > 0) ftl_button(MAP_ACT_X, MAP_ACT_Y, BOT_W - MAP_ACT_X - 2, 20, true, "STORE");
 }
 
 // ---- Sector map: the run's eight columns of sectors; pick where to go from the exit.
@@ -3726,6 +3735,9 @@ static void boss_crew_count(const Ship* s, const CrewSet* cs) {
 // The enemy ship loaded during the jump's white flash, for the beacon's event (see the jump code):
 // the fight starts with it in place, instead of stalling to load when the dialog closes.
 static const void* sPreloadFor;  // the event's ship definition it was built for (NULL: none)
+// A ship that's here but not fighting (as in FTL): an event's ship while its dialog is up, one that
+// surrendered or made peace, or one whose crew we killed. Drawn in the enemy panel until we jump.
+static bool sVisitor;
 
 static int sAchFam = -1, sAchLayout;  // the run's ship family and layout
 static bool sAchWasWon, sAchWasCloaked, sAchShieldBroken;
@@ -3787,7 +3799,7 @@ static void ach_fight_won(const Combat* c, const Ship* ps, const Ship* es) {
 }
 
 static void check_achievements(const Combat* c, Ship* ps, CrewSet* pc, const Ship* es, const CrewSet* ec) {
-    if (!sInRun) return;
+    if (!sInRun || sRun.sandbox) return;  // sandbox runs earn nothing
     sAchFam = profile_family_of(ps->bp->name, &sAchLayout);
     const int f = sAchFam;
 #define F sRun.feats
@@ -4107,7 +4119,7 @@ static void stats_select(int i) {
 // Options sets the volumes (kept in sdmc:/3ds/ftl3ds/settings.txt). In a game START pauses, with
 // RESUME, OPTIONS, MAIN MENU and QUIT.
 
-enum { MENU_NONE, MENU_MAIN, MENU_HANGAR, MENU_OPTIONS, MENU_PAUSE, MENU_STATS };
+enum { MENU_NONE, MENU_MAIN, MENU_HANGAR, MENU_OPTIONS, MENU_PAUSE, MENU_STATS, MENU_LOADOUT };
 static int sMenu, sMenuBack;  // the open screen, and where Options goes back to
 static int sMenuSel;          // the button the D-pad has picked
 static Texture sTitleArt;  // main_base2.png, the logo included
@@ -4145,14 +4157,15 @@ static void settings_save(void) {
 }
 
 // ---- The main menu's buttons ----
-enum { MM_CONTINUE, MM_NEWGAME, MM_TUTORIAL, MM_STATS, MM_OPTIONS, MM_CREDITS, MM_QUIT, MM_COUNT };
+// The tutorial slot holds SANDBOX (this port has no tutorial).
+enum { MM_CONTINUE, MM_NEWGAME, MM_SANDBOX, MM_STATS, MM_OPTIONS, MM_CREDITS, MM_QUIT, MM_COUNT };
 static Texture sMenuBtn[MM_COUNT][3];  // off, on, selected
 #define MM_SCALE 0.55f
 #define MM_TOP 12
 #define MM_PITCH 31
 
 static bool mm_enabled(int i) {
-    return i == MM_NEWGAME || i == MM_OPTIONS || i == MM_QUIT || i == MM_STATS || (i == MM_CONTINUE && sSaveExists);
+    return i == MM_NEWGAME || i == MM_SANDBOX || i == MM_OPTIONS || i == MM_QUIT || i == MM_STATS || (i == MM_CONTINUE && sSaveExists);
 }
 
 static void menu_art(bool want) {
@@ -4204,6 +4217,13 @@ static void draw_main_menu(void) {
     C2D_DrawRectSolid(0, 0, 0, BOT_W, BOT_H, C2D_Color32(8, 10, 20, 255));
     for (int i = 0; i < MM_COUNT; i++) {
         int state = !mm_enabled(i) ? 0 : i == sMenuSel ? 2 : 1;
+        if (i == MM_SANDBOX) {  // FTL has no art for it: its own words, in the buttons' colours
+            const Texture* ref = &sMenuBtn[MM_NEWGAME][1];
+            float h = ref->loaded ? ref->height * MM_SCALE : 20;
+            u32 col = state == 2 ? C2D_Color32(255, 230, 120, 255) : C2D_Color32(225, 230, 235, 255);
+            draw_text_centred(0, MM_TOP + i * MM_PITCH + h * 0.5f - 9, BOT_W, 0.7f, col, "SANDBOX");
+            continue;
+        }
         const Texture* t = &sMenuBtn[i][state];
         if (!t->loaded) continue;
         C2D_DrawImageAt(t->image, floorf((BOT_W - t->width * MM_SCALE) * 0.5f), MM_TOP + i * MM_PITCH, 0, NULL, MM_SCALE, MM_SCALE);
@@ -4261,7 +4281,10 @@ static void hangar_select(int index) {
 }
 
 // Whether the hangar's blueprint bi is unlocked (ships outside FTL's ten are always available).
+static bool sSandbox;  // the hangar was opened for a sandbox run: every ship, then a loadout
+
 static bool hangar_unlocked(const ShipBlueprint* bps, int bi) {
+    if (sSandbox) return bi >= 0;
     int layout, fam = bi >= 0 ? profile_family_of(bps[bi].name, &layout) : -1;
     return bi >= 0 && (fam < 0 || profile_layout_unlocked(fam, layout));
 }
@@ -4463,6 +4486,117 @@ static void draw_volume_row(float y, const char* label, int v, bool sel) {
     ftl_button(270, y, 40, 32, false, "+");
 }
 
+
+// ---- Sandbox: any ship (all unlocked) with any weapons, drones and augments --------------------
+// The hangar opened from SANDBOX, then a loadout screen: a row per slot, each cycling through
+// every item this port can use. Sandbox runs earn no achievements or unlocks.
+enum { LO_WEAPON, LO_DRONE, LO_AUG };
+#define LO_MAX_ROWS 12
+#define LO_TOP 22
+#define LO_ROW_H 16
+#define LO_BTN_Y 214
+static int sLoKind[LO_MAX_ROWS], sLoSlot[LO_MAX_ROWS], sLoRowCount;
+static const char* sLoPick[LO_MAX_ROWS];  // item per row (NULL: empty)
+static const ItemDef* sLoList[3][300];
+static int sLoListCount[3];
+
+static void loadout_init(const ShipBlueprint* bp) {
+    static const int itemKind[3] = {ITEM_WEAPON, ITEM_DRONE, ITEM_AUGMENT};
+    for (int k = 0; k < 3; k++) {
+        const ItemDef* all[300];
+        int n = items_all_of_kind(itemKind[k], all, 300);
+        sLoListCount[k] = 0;
+        for (int i = 0; i < n; i++) {
+            const WeaponDef* w = k == LO_WEAPON ? weapon_find(all[i]->name) : NULL;
+            const DroneDef* dr = k == LO_DRONE ? drone_find(all[i]->name) : NULL;
+            if ((k == LO_WEAPON && (!w || !weapon_supported(w))) || (k == LO_DRONE && (!dr || !drone_supported(dr)))) continue;
+            sLoList[k][sLoListCount[k]++] = all[i];
+        }
+    }
+    int counts[3] = {bp->weaponSlots, bp->droneSlots, MAX_AUGS};
+    sLoRowCount = 0;
+    for (int k = 0; k < 3; k++)
+        for (int s = 0; s < counts[k] && sLoRowCount < LO_MAX_ROWS; s++) {
+            sLoKind[sLoRowCount] = k;
+            sLoSlot[sLoRowCount] = s;
+            sLoPick[sLoRowCount++] = k == LO_WEAPON ? (s < bp->weaponCount ? bp->weapons[s] : NULL)
+                                     : k == LO_DRONE ? (s < bp->droneCount ? bp->drones[s] : NULL)
+                                                     : (s < bp->augCount ? bp->augs[s] : NULL);
+        }
+}
+
+// The next (dir 1) or previous (-1) item for a row, through "empty".
+static void loadout_cycle(int row, int dir) {
+    int k = sLoKind[row], n = sLoListCount[k], at = -1;
+    for (int i = 0; i < n && sLoPick[row]; i++)
+        if (!strcmp(sLoList[k][i]->name, sLoPick[row])) at = i;
+    at = (at + 1 + dir + (n + 1)) % (n + 1) - 1;
+    sLoPick[row] = at < 0 ? NULL : sLoList[k][at]->name;
+}
+
+static void draw_loadout(void) {
+    const u32 white = C2D_Color32(235, 235, 235, 255), dim = C2D_Color32(150, 160, 175, 255);
+    static const char* const kindName[3] = {"Weapon", "Drone", "Augment"};
+    C2D_DrawRectSolid(0, 0, 0, BOT_W, BOT_H, C2D_Color32(8, 10, 20, 255));
+    draw_text(6, 3, 0.5f, white, "SANDBOX LOADOUT");
+    draw_text(BOT_W - 64, 5, 0.34f, dim, "tap < or >");
+    for (int r = 0; r < sLoRowCount; r++) {
+        float y = LO_TOP + r * LO_ROW_H;
+        C2D_DrawRectSolid(2, y, 0, BOT_W - 4, LO_ROW_H - 1, r == sMenuSel ? C2D_Color32(50, 62, 80, 255) : C2D_Color32(24, 30, 42, 255));
+        char label[24];
+        snprintf(label, sizeof(label), "%s %d", kindName[sLoKind[r]], sLoSlot[r] + 1);
+        draw_text(6, y + 1, 0.38f, dim, label);
+        draw_text(86, y + 1, 0.4f, white, "<");
+        draw_text(BOT_W - 14, y + 1, 0.4f, white, ">");
+        draw_text_centred(98, y + 1, BOT_W - 116, 0.4f, sLoPick[r] ? white : dim, sLoPick[r] ? item_title_of(sLoPick[r]) : "- empty -");
+    }
+    ftl_button(4, LO_BTN_Y, 90, 24, false, "BACK");
+    ftl_button(BOT_W - 124, LO_BTN_Y, 120, 24, true, "START");
+}
+
+enum { LO_NONE = -1, LO_BACK = -2, LO_START = -3 };
+static int loadout_touch(int px, int py, int* dir) {
+    if (py >= LO_BTN_Y) return px < 100 ? LO_BACK : px >= BOT_W - 124 ? LO_START : LO_NONE;
+    if (py < LO_TOP) return LO_NONE;
+    int r = (py - LO_TOP) / LO_ROW_H;
+    if (r >= sLoRowCount) return LO_NONE;
+    *dir = px < (86 + BOT_W) / 2 ? -1 : 1;  // left half: previous; right half: next
+    return r;
+}
+
+// Fits the chosen loadout to the new run's ship: weapons and drones replace the blueprint's, the
+// weapons (and drone) system grows to power them all (up to 8, with the reactor to match), and a
+// drone system is fitted if the ship has room for one.
+static void sandbox_apply(Ship* s, FtlDat* dat, const AnimDb* db) {
+    gpu_idle();
+    while (s->weaponCount) combat_remove_weapon(s, 0);
+    while (s->droneCount) combat_remove_drone(s, 0);
+    sRun.augCount = 0;
+    int wpower = 0, dpower = 0;
+    for (int r = 0; r < sLoRowCount; r++) {
+        if (!sLoPick[r]) continue;
+        if (sLoKind[r] == LO_WEAPON && combat_add_weapon(s, dat, db, sLoPick[r])) wpower += weapon_find(sLoPick[r])->power;
+        if (sLoKind[r] == LO_DRONE) {
+            if (ship_find_system(s, SYS_DRONES) < 0)
+                for (int o = 0; o < s->bp->optionalCount; o++)
+                    if (s->bp->optional[o].type == SYS_DRONES) ship_install_system(s, dat, &s->bp->optional[o]);
+            if (ship_find_system(s, SYS_DRONES) >= 0 && combat_add_drone(s, dat, db, sLoPick[r])) dpower += drone_find(sLoPick[r])->power;
+        }
+        if (sLoKind[r] == LO_AUG && sRun.augCount < MAX_AUGS)
+            snprintf(sRun.augs[sRun.augCount++], sizeof(sRun.augs[0]), "%s", sLoPick[r]);
+    }
+    const int types[2] = {SYS_WEAPONS, SYS_DRONES}, need[2] = {wpower, dpower};
+    for (int k = 0; k < 2; k++) {
+        int si = ship_find_system(s, types[k]);
+        if (si < 0) continue;
+        int want = need[k] > 8 ? 8 : need[k], have = s->sysDefs[si].level;
+        if (want <= have) continue;
+        s->sysDefs[si].level = want;
+        s->reactor += want - have;
+        if (s->reactor > REACTOR_MAX) s->reactor = REACTOR_MAX;
+    }
+}
+
 static void draw_options(void) {
     C2D_DrawRectSolid(0, 0, 0, BOT_W, BOT_H, C2D_Color32(10, 13, 24, 255));
     draw_text(8, 6, 0.55f, C2D_Color32(255, 220, 120, 255), "OPTIONS");
@@ -4585,13 +4719,6 @@ static bool save_continue(ShipSlots* pl, FtlDat* dat, const AnimDb* db, const Na
     }
     sRun = run;
     return true;
-}
-
-// The sector enemies are built for: a sector earlier on easy (xftl Difficulty.sectorOffset).
-static int enemy_sector(void) {
-    if (!sInRun) return 3;
-    int s = sRun.sector - (sRun.difficulty == DIFF_EASY ? 1 : 0);
-    return s < 0 ? 0 : s;
 }
 
 static void strand_boarders(const Ship* ship, CrewSet* crew, CrewSet* away) {
@@ -4730,6 +4857,7 @@ int main(void) {
     int dbgShip = 0, dbgEnemy = 0;
     float dragX0 = 0, dragY0 = 0, dragX1 = 0, dragY1 = 0;
     bool paused = false, haveEnemy = false;
+    bool preloadPending = false;  // load the beacon's ship once the jump animation ends
     camera_fit(&cam, &player.ships[player.cur], 8, false);
     camera_fit(&map, &player.ships[player.cur], 8, true);
 
@@ -4739,28 +4867,30 @@ int main(void) {
 #define ENEMY_CREW (haveEnemy ? &enemy.crews[enemy.cur] : NULL)
 
     // The enemy's cameras: the top screen's panel and the arms tab's map.
-#define FIT_ENEMY_CAMERAS()                                                                                      \
+#define FIT_ENEMY_CAMERAS_FOR(es)                                                                                      \
     do {                                                                                                         \
-        camera_fit(&ecam, ENEMY_SHIP, 4, true);                                                                  \
+        camera_fit(&ecam, (es), 4, true);                                                                  \
         /* Turn the enemy on the arms tab only if that shows it bigger. */                                       \
         emap.rotated = false;                                                                                    \
-        camera_fit(&emap, ENEMY_SHIP, 10, true);                                                                 \
+        camera_fit(&emap, (es), 10, true);                                                                 \
         float flatZoom = emap.zoom;                                                                              \
         emap.rotated = true;                                                                                     \
-        camera_fit(&emap, ENEMY_SHIP, 10, true);                                                                 \
+        camera_fit(&emap, (es), 10, true);                                                                 \
         if (emap.zoom < flatZoom) {                                                                              \
             emap.rotated = false;                                                                                \
-            camera_fit(&emap, ENEMY_SHIP, 10, true);                                                             \
+            camera_fit(&emap, (es), 10, true);                                                             \
         }                                                                                                        \
     } while (0)
+#define FIT_ENEMY_CAMERAS() FIT_ENEMY_CAMERAS_FOR(ENEMY_SHIP)
 
     // A fresh random enemy, and a new fight against it.
 #define NEW_FIGHT()                                                                                              \
     do {                                                                                                         \
         int pick = enemyCount > 0 ? rand() % enemyCount : -1;                                                    \
+        sVisitor = false;                                                                                        \
         if (testEnemy >= 0) pick = testEnemy;                                                                    \
         testEnemy = -1;                                                                                          \
-        if (pick >= 0) ship_generate_enemy(&sEnemyBp, &enemyBps[pick], enemy_sector()); \
+        if (pick >= 0) ship_generate_enemy(&sEnemyBp, &enemyBps[pick], sInRun ? sRun.sector : 3, sInRun ? sRun.difficulty : DIFF_NORMAL); \
         haveEnemy = pick >= 0 && !testNoEnemy && \
                     slots_load(&enemy, &dat, &anims, &names, &sEnemyBp, err, sizeof(err)); \
         if (haveEnemy) FIT_ENEMY_CAMERAS();                                                                      \
@@ -4775,6 +4905,7 @@ int main(void) {
 #define START_BOSS(stage)                                                                                       \
     do {                                                                                                         \
         char bossName[32];                                                                                       \
+        sVisitor = false;                                                                                        \
         static const char* const bossDiff[3] = {"EASY", "NORMAL", "HARD"};                                       \
         snprintf(bossName, sizeof(bossName), "BOSS_%d_%s_DLC", (stage), bossDiff[sInRun ? sRun.difficulty : DIFF_NORMAL]); \
         haveEnemy = ship_find_boss(&dat, bossName, &sEnemyBp) &&                                                 \
@@ -4802,6 +4933,7 @@ int main(void) {
 #define END_FIGHT()                                                          \
     do {                                                                     \
         haveEnemy = false;                                                   \
+        sVisitor = false; /* callers keeping the ship in view set it after */ \
         sBossStage = 0;                                                      \
         sEscapeLeft = -1.0f;                                                 \
         combat_start(&combat, PLAYER_SHIP, PLAYER_CREW, NULL, NULL);         \
@@ -4815,7 +4947,7 @@ int main(void) {
         sRun.difficulty = sDifficulty;                                       \
         combat.difficulty = sDifficulty;                                     \
         sMapOpen = sStoreOpen = sSectorMapOpen = false;                      \
-        sStoreBeacon = -1;                                                   \
+\
         END_FIGHT();                                                         \
         run_start(&sRun, RCTX);                                              \
         sync_augs(PLAYER_SHIP, PLAYER_CREW, NULL);                           \
@@ -4949,7 +5081,8 @@ int main(void) {
                     }
                 }
                 if (act >= 0) sound_play("hoverBeep");
-                if (act == MM_NEWGAME) {
+                if (act == MM_NEWGAME || act == MM_SANDBOX) {
+                    sSandbox = act == MM_SANDBOX;
                     if (!sFamCount) build_families(blueprints, bpCount);
                     hangar_select(hangar_unlocked(blueprints, index) ? index : bp_of_family(blueprints, bpCount, FAM_KESTREL, 0));
                     if (sFam[sHangarFam][sHangarType] >= 0) index = sFam[sHangarFam][sHangarType];
@@ -4961,7 +5094,6 @@ int main(void) {
                         // Back to the saved beacon, at peace.
                         sInRun = true;
                         sMapOpen = sStoreOpen = sSectorMapOpen = sShipOpen = false;
-                        sStoreBeacon = !strcmp(sRun.beacons[sRun.current].eventName, "STORE") ? sRun.current : -1;
                         END_FIGHT();
                         combat.difficulty = sRun.difficulty;
                         sDifficulty = sRun.difficulty;
@@ -5011,6 +5143,12 @@ int main(void) {
                     sHangarType = type;
                 }
                 hangar_preview_set(blueprints, index);
+                if (h == HG_START && sSandbox) {  // on to the loadout
+                    loadout_init(&blueprints[index]);
+                    sMenu = MENU_LOADOUT;
+                    sMenuSel = 0;
+                    h = HG_NONE;
+                }
                 if (sHangarStarting) {
                     // START was pressed last frame (that frame said "Preparing ship"): load it now.
                     sHangarStarting = false;
@@ -5038,7 +5176,48 @@ int main(void) {
                         camera_fit(&cam, PLAYER_SHIP, 8, false);
                         camera_fit(&map, PLAYER_SHIP, 8, true);
                     }
+                    sRun.sandbox = false;
                     START_RUN();
+                    continue;
+                }
+            } else if (sMenu == MENU_LOADOUT) {
+                int dir = 0, row = -1, act = 0;  // act: -1 back, 1 start
+                if (down & KEY_DUP) sMenuSel = (sMenuSel + sLoRowCount - 1) % sLoRowCount;
+                if (down & KEY_DDOWN) sMenuSel = (sMenuSel + 1) % sLoRowCount;
+                if (down & (KEY_DLEFT | KEY_DRIGHT)) {
+                    row = sMenuSel;
+                    dir = (down & KEY_DLEFT) ? -1 : 1;
+                }
+                if (down & KEY_B) act = -1;
+                if (down & KEY_A) act = 1;
+                if (touched) {
+                    int t = loadout_touch(touch.px, touch.py, &dir);
+                    if (t == LO_BACK) act = -1;
+                    else if (t == LO_START) act = 1;
+                    else if (t >= 0) row = sMenuSel = t;
+                }
+                if (row >= 0 && dir) {
+                    loadout_cycle(row, dir);
+                    sound_play("hoverBeep");
+                }
+                if (act == -1) {
+                    sound_play("hoverBeep");
+                    sMenu = MENU_HANGAR;
+                } else if (act == 1) {
+                    sound_play("jumpLeave");
+                    hangar_preview_free();
+                    sMenu = MENU_NONE;
+                    menu_art(false);
+                    gpu_idle();
+                    texture_free(&sMiniShip);
+                    sMiniFor = -1;
+                    if (slots_load(&player, &dat, &anims, &names, &blueprints[index], err, sizeof(err))) {
+                        camera_fit(&cam, PLAYER_SHIP, 8, false);
+                        camera_fit(&map, PLAYER_SHIP, 8, true);
+                    }
+                    sRun.sandbox = true;
+                    START_RUN();
+                    sandbox_apply(PLAYER_SHIP, &dat, &anims);
                     continue;
                 }
             } else if (sMenu == MENU_STATS) {
@@ -5127,10 +5306,8 @@ int main(void) {
             if (sMenu == MENU_NONE) continue;
             sound_update(dt);
             bool previewLoading = false;
-            if (sMenu == MENU_HANGAR) {
-                hangar_mini(blueprints);
-                previewLoading = hangar_preview_update();
-            }
+            if (sMenu == MENU_HANGAR) hangar_mini(blueprints);
+            if (sMenu == MENU_HANGAR || sMenu == MENU_LOADOUT) previewLoading = hangar_preview_update();
             if (sMenu == MENU_STATS) ach_icons(true);
             popup_update(dt, blueprints, bpCount);
             gfxSet3D(false);  // menus are flat
@@ -5138,7 +5315,7 @@ int main(void) {
             C2D_TextBufClear(textBuf);
             C2D_TargetClear(top, C2D_Color32(8, 10, 20, 255));
             C2D_SceneBegin(top);
-            if (sMenu == MENU_HANGAR) {
+            if (sMenu == MENU_HANGAR || sMenu == MENU_LOADOUT) {
                 // The chosen ship, large, with its crew.
                 draw_title_top(NULL);
                 C2D_DrawRectSolid(0, 0, 0, TOP_W, TOP_H, C2D_Color32(8, 10, 20, 170));
@@ -5149,8 +5326,8 @@ int main(void) {
                 }
                 static const char* const diffs[3] = {"Easy", "Normal", "Hard"};
                 char cap[96];
-                snprintf(cap, sizeof(cap), "%s - Type %c - %s", text_get(blueprints[index].classId, blueprints[index].name),
-                         'A' + sHangarType, diffs[sDifficulty]);
+                snprintf(cap, sizeof(cap), "%s%s - Type %c - %s", sSandbox ? "Sandbox: " : "",
+                         text_get(blueprints[index].classId, blueprints[index].name), 'A' + sHangarType, diffs[sDifficulty]);
                 C2D_DrawRectSolid(0, TOP_H - 24, 0, TOP_W, 24, C2D_Color32(8, 10, 20, 220));
                 draw_text_centred(0, TOP_H - 21, TOP_W, 0.45f, C2D_Color32(235, 235, 235, 255), cap);
             } else {
@@ -5164,6 +5341,7 @@ int main(void) {
             else if (sMenu == MENU_HANGAR) draw_hangar(blueprints);
             else if (sMenu == MENU_OPTIONS) draw_options();
             else if (sMenu == MENU_STATS) draw_stats();
+            else if (sMenu == MENU_LOADOUT) draw_loadout();
             else draw_pause();
             C3D_FrameEnd(0);
             continue;
@@ -5206,7 +5384,9 @@ int main(void) {
                 } else {
                     run_fight_won(&sRun, RCTX, !combat.crewKilled);
                 }
+                bool derelict = combat.crewKilled && !sBossStage;
                 END_FIGHT();
+                sVisitor = derelict;
             } else {
                 NEW_FIGHT();
             }
@@ -5258,12 +5438,12 @@ int main(void) {
             if (haveEnemy && combat.result == COMBAT_FIGHTING) {
                 bring_boarders_home(PLAYER_SHIP, PLAYER_CREW, ENEMY_CREW);
                 END_FIGHT();
+                sVisitor = true;  // at peace now, but still here
                 sRun.view.shipDef = NULL;
             }
         }
         if (sInRun && !sRun.view.active && sRun.view.store) {
             sRun.view.store = false;
-            sStoreBeacon = sRun.current;
             sStoreOpen = true;
             sStoreTab = 0;
             sStoreSel = -1;
@@ -5317,23 +5497,12 @@ int main(void) {
                 crew_prune_races(PLAYER_CREW);  // boarders' sprite sheets (about 1 MB each)
                 explosion_cache_clear();
                 item_art_clear();
+                sVisitor = false;
                 if (!haveEnemy && enemy.loaded) slots_free(&enemy);  // the last enemy ship
-                // The beacon's ship, if its event has one, built now while the screen is white
-                // (the flash holds a moment longer instead of the fight stalling later).
                 sPreloadFor = NULL;
-                const XNode *arrShip, *arrDef;
-                if (!haveEnemy && run_arrival_ship(&sRun, &arrShip, &arrDef)) {
-                    const char* bp = run_ship_blueprint(arrShip, arrDef);
-                    int pick = bp ? find_blueprint(enemyBps, enemyCount, bp) : -1;
-                    if (pick >= 0) {
-                        ship_generate_enemy(&sEnemyBp, &enemyBps[pick], enemy_sector());
-                        if (slots_load(&enemy, &dat, &anims, &names, &sEnemyBp, err, sizeof(err)))
-                            sPreloadFor = arrDef ? (const void*)arrDef : (const void*)arrShip;
-                    }
-                }
+                preloadPending = !haveEnemy;  // the beacon's ship, once we've arrived (below)
                 if (sJumpTarget < 0) {
                     sRun.fuel--;
-                    sStoreBeacon = -1;
                     run_next_sector(&sRun, RCTX, sNextRow);
                     sound_play("jumpArrive");
                 } else {
@@ -5343,6 +5512,26 @@ int main(void) {
             }
             if (before >= JUMP_OUT && sBackdropLoading && sJumpTime > JUMP_OUT + 0.05f) sJumpTime = JUMP_OUT + 0.05f;
             if (sJumpTime >= JUMP_OUT + JUMP_IN) sJumpTime = -1.0f;
+        }
+        // The beacon's ship, if its event has one, built once the jump is over (doing it at the
+        // flash froze the animation for a second): it shows while the event's text is up, and the
+        // fight starts with it in place instead of stalling to load then.
+        if (preloadPending && sJumpTime < 0.0f) {
+            preloadPending = false;
+            const XNode *arrShip, *arrDef;
+            if (sInRun && !haveEnemy && run_arrival_ship(&sRun, &arrShip, &arrDef)) {
+                const char* bp = run_ship_blueprint(arrShip, arrDef);
+                int pick = bp ? find_blueprint(enemyBps, enemyCount, bp) : -1;
+                if (pick >= 0) {
+                    gpu_idle();
+                    ship_generate_enemy(&sEnemyBp, &enemyBps[pick], sRun.sector, sRun.difficulty);
+                    if (slots_load(&enemy, &dat, &anims, &names, &sEnemyBp, err, sizeof(err))) {
+                        sPreloadFor = arrDef ? (const void*)arrDef : (const void*)arrShip;
+                        sVisitor = true;  // in view while its event plays out
+                        FIT_ENEMY_CAMERAS_FOR(&enemy.ships[enemy.cur]);
+                    }
+                }
+            }
         }
 
         Ship* ship = PLAYER_SHIP;
@@ -5505,7 +5694,8 @@ int main(void) {
                     sSectorPick = -1;
                     sound_play("hoverBeep");
                 }
-            } else if (t == MAPT_ACTION && sRun.current == sStoreBeacon) {
+            } else if (t == MAPT_ACTION && sRun.beacons[sRun.current].storeSlot > 0) {
+                run_store_enter(&sRun, RCTX);  // this beacon's stock, as we left it
                 sMapOpen = false;
                 sStoreOpen = true;
                 sStoreTab = 0;
@@ -5774,7 +5964,7 @@ int main(void) {
             dragging = false;
         }
 
-        float topW = tab == TAB_ARMS || !foe ? TOP_W : ENEMY_X;
+        float topW = tab == TAB_ARMS || (!foe && !(sVisitor && enemy.loaded)) ? TOP_W : ENEMY_X;
         if (cam.vw != topW) {
             cam.vw = topW;
             camera_fit(&cam, ship, 8, false);
@@ -5811,6 +6001,7 @@ int main(void) {
                     sound_play("jumpLeave");
                     strand_boarders(ship, crew, foeCrew);
                     END_FIGHT();
+                    sVisitor = false;  // it jumped away
                     if (!run_ship_event(&sRun, RCTX, "gotaway")) {
                         memset(&sRun.view, 0, sizeof(sRun.view));
                         sRun.view.active = true;
@@ -5870,14 +6061,18 @@ int main(void) {
         if (ship->cloakTime > 0.0f) ship_load_cloak(ship);
         if (foe && foe->cloakTime > 0.0f) ship_load_cloak(foe);
 
-        update_visibility(ship, crew, foe, foeCrew);
+        // The ship in the enemy panel: the one we're fighting, or a visitor.
+        Ship* shown = foe ? foe : sVisitor && enemy.loaded ? &enemy.ships[enemy.cur] : NULL;
+        CrewSet* shownCrew = foe ? foeCrew : shown ? &enemy.crews[enemy.cur] : NULL;
+        if (shown && !foe && !frozen) crew_update(shownCrew, shown, dt);
+        update_visibility(ship, crew, shown, shownCrew);
         check_achievements(&combat, ship, crew, foe, foeCrew);
         popup_update(dt, blueprints, bpCount);
 
         // Top screen: the player's ship, then the enemy panel over its right-hand side. On the arms
         // tab the enemy is on the touch screen, so our ship takes the whole top screen and enemy
         // fire comes in from the right edge.
-        bool split = tab != TAB_ARMS && foe;  // no enemy: our ship gets the whole screen
+        bool split = tab != TAB_ARMS && shown;  // no ship there: ours gets the whole screen
         backdrop_sync(&sRun);  // may wait for the GPU, so before the frame starts
         // Stereoscopic 3D with the slider up: the top screen once per eye, the stars set back
         // behind the screen and the readouts floating a little in front of it.
@@ -5913,11 +6108,11 @@ int main(void) {
         if (split) {
             clip_top(ENEMY_X, TOP_W);
             C2D_DrawRectSolid(ENEMY_X, 0, 0, ENEMY_W, TOP_H, C2D_Color32(12, 15, 28, 150));
-            if (foe) {
-                draw_ship(foe, &ecam);
-                draw_weapons(foe, &ecam);
-                draw_crew(foe, foeCrew, &ecam);
-                draw_shields(foe, &ecam, combat.shieldFlash[SIDE_ENEMY]);
+            if (shown) {
+                draw_ship(shown, &ecam);
+                draw_weapons(shown, &ecam);
+                draw_crew(shown, shownCrew, &ecam);
+                draw_shields(shown, &ecam, foe ? combat.shieldFlash[SIDE_ENEMY] : 0.0f);
             }
             if (foe) draw_effects(&combat, SIDE_ENEMY, &ecam);
             if (foe) draw_beams(&combat, SIDE_ENEMY, &ecam);
@@ -5932,7 +6127,7 @@ int main(void) {
         cam.x = camX;
         draw_jump_fx();
         STEREO_DEPTH(STEREO_NEAR);
-        draw_top_hud(ship, split ? foe : NULL, &combat, paused);
+        draw_top_hud(ship, split ? shown : NULL, &combat, paused);
         draw_env_hud(&combat);
         {
             unsigned lf = linearSpaceFree();

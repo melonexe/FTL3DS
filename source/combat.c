@@ -271,14 +271,15 @@ void combat_arm(Ship* s, FtlDat* dat, const AnimDb* db) {
                 if (w->power == left && w->power != 1) continue;
                 if (used == 0 && left >= 3 && w->power < 2) continue;
                 if (w->power < left / 4.0f) continue;
-                bool h = w->damage != 0, l = w->type == WEAPON_LASER || (w->type == WEAPON_MISSILES && w->sp <= 3);
+                // Laser-style: lasers (ion lasers too) or missiles that don't pierce shields (xftl).
+                bool h = w->damage != 0, l = w->type == WEAPON_LASER || w->type == WEAPON_ION || (w->type == WEAPON_MISSILES && w->sp <= 3);
                 if (!((!hull && h) || (!laser && l) || (hull && laser))) continue;
                 ok[m++] = w;
             }
             if (!m) break;
             const WeaponDef* w = ok[rand() % m];
             hull |= w->damage != 0;
-            laser |= w->type == WEAPON_LASER || (w->type == WEAPON_MISSILES && w->sp <= 3);
+            laser |= w->type == WEAPON_LASER || w->type == WEAPON_ION || (w->type == WEAPON_MISSILES && w->sp <= 3);
             names[count++] = w->name;
             used += w->power;
         }
@@ -341,6 +342,7 @@ void combat_arm(Ship* s, FtlDat* dat, const AnimDb* db) {
         }
         if (s->droneParts < dcount * 2) s->droneParts = dcount * 2;
     }
+    if (bp->enemy && s->droneParts == 0 && ship_find_system(s, SYS_HACKING) >= 0) s->droneParts = 5;  // xftl
     for (int i = 0; i < dcount; i++) combat_add_drone(s, dat, db, dnames[i]);
 }
 

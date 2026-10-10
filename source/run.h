@@ -18,6 +18,7 @@
 #define MAX_CHOICES 8
 #define RUN_SECTORS 8
 #define SECTOR_ROWS 4
+#define MAX_STORES 6  // stores in one sector whose stock is remembered
 
 // One sector on the sector map (FTL's StarMap: 8 columns, the middle ones 2-4 sectors each).
 enum { SECTOR_CIVILIAN, SECTOR_HOSTILE, SECTOR_NEBULA, SECTOR_FINAL };
@@ -40,7 +41,17 @@ typedef struct {
     bool base;           // the Last Stand: the Federation base
     bool fleetSoon;      // the Last Stand: the rebels take it next turn (flashing on the map)
     bool fleetHeld;      // the Last Stand: rebel-held
+    signed char storeSlot;  // its store's stock in Run.storeSaved (1-based; 0: no store opened here)
 } Beacon;
+
+// A store's stock, kept per beacon so a store can be visited again (wiki: Beacon, "You previously
+// found a store at this location").
+typedef struct {
+    int fuel, missiles, parts;
+    int kind[STORE_SECTIONS], sectionCount;
+    char item[STORE_SECTIONS][STORE_ITEMS][32];
+    unsigned char skill[STORE_SECTIONS][STORE_ITEMS][2];
+} StoreStock;
 
 // What the player sees for the current event, and what the game should do once it's read.
 typedef struct {
@@ -92,6 +103,7 @@ typedef struct {
     float fleetX, fleetY;  // rebel fleet circle centre (radius 767)
     int env, envTarget;    // the current beacon's environment (ENV_*) and PDS targets
     int difficulty;        // DIFF_* (kept by run_start: set it before starting)
+    bool sandbox;          // any ship and loadout: no achievements or unlocks
     bool revealed;
     bool over, won;
     // The Last Stand (final sector; wiki: The Rebel Flagship, xftl FlagshipBoss): the flagship
@@ -114,6 +126,8 @@ typedef struct {
     int storeKind[STORE_SECTIONS], storeSectionCount;   // ITEM_* per section
     char storeItem[STORE_SECTIONS][STORE_ITEMS][32];   // blueprint names (systems: system name), "" once bought
     unsigned char storeSkill[STORE_SECTIONS][STORE_ITEMS][2];  // crew for hire: skill * 4 + level (0: untrained)
+    StoreStock storeSaved[MAX_STORES];  // the sector's stores, by Beacon.storeSlot
+    int storeSavedCount;
     // Equipment that isn't on a ship slot.
     char augs[MAX_AUGS][32];
     int augCount;
@@ -177,6 +191,12 @@ bool run_buy(Run* run, RunCtx* ctx, int item);
 // Store items: price, and buying (installs or stores it). Returns false if it can't.
 int run_store_price(const Run* run, int section, int slot);
 bool run_store_buy(Run* run, RunCtx* ctx, int section, int slot);
+// Opens the current beacon's store: its remembered stock, or fresh stock the first time.
+void run_store_enter(Run* run, RunCtx* ctx);
+// Whether beacon i has a store (known from its event, or one was opened there).
+bool run_beacon_store(const Run* run, int beacon);
+// An unvisited distress beacon (its event carries <distressBeacon/>).
+bool run_beacon_distress(const Run* run, int beacon);
 // Adds a weapon/drone/augment/crew by name ("RANDOM" or a blueprint list picks one). Fills `got`
 // with its display name. Returns false if there was no room.
 bool run_give(Run* run, RunCtx* ctx, int kind, const char* name, char* got, size_t gotSize);

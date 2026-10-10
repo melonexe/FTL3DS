@@ -110,4 +110,11 @@ int items_of_kind(int kind, const ItemDef** out, int max) {
     return n;
 }
 
+int items_all_of_kind(int kind, const ItemDef** out, int max) {
+    int n = 0;
+    for (int i = 0; i < sItemCount && n < max; i++)
+        if (sItems[i].kind == kind) out[n++] = &sItems[i];
+    return n;
+}
+
 int item_reactor_cost(int bars) { return bars < 5 ? 30 : (bars / 5) * 5 + 15; }

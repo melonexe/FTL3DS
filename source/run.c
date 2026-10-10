@@ -574,6 +574,49 @@ static void stock_store(Run* run, const Ship* s) {
     }
 }
 
+static void stock_copy(Run* run, StoreStock* s, bool save) {
+#define X(a, b) \
+    if (save) memcpy(&(a), &(b), sizeof(a)); \
+    else memcpy(&(b), &(a), sizeof(a))
+    X(s->fuel, run->storeFuel);
+    X(s->missiles, run->storeMissiles);
+    X(s->parts, run->storeParts);
+    X(s->kind, run->storeKind);
+    X(s->sectionCount, run->storeSectionCount);
+    X(s->item, run->storeItem);
+    X(s->skill, run->storeSkill);
+#undef X
+}
+
+// Writes the open store's stock back to its beacon (after a purchase).
+static void store_commit(Run* run) {
+    int slot = run->beacons[run->current].storeSlot;
+    if (slot > 0) stock_copy(run, &run->storeSaved[slot - 1], true);
+}
+
+void run_store_enter(Run* run, RunCtx* ctx) {
+    Beacon* b = &run->beacons[run->current];
+    if (b->storeSlot > 0) {
+        stock_copy(run, &run->storeSaved[b->storeSlot - 1], false);
+        return;
+    }
+    stock_store(run, ctx->ship);
+    if (run->storeSavedCount < MAX_STORES) {
+        b->storeSlot = (signed char)++run->storeSavedCount;
+        store_commit(run);
+    }
+}
+
+bool run_beacon_store(const Run* run, int i) {
+    const Beacon* b = &run->beacons[i];
+    return b->storeSlot > 0 || (b->event && xchild(b->event, "store"));
+}
+
+bool run_beacon_distress(const Run* run, int i) {
+    const Beacon* b = &run->beacons[i];
+    return !b->visited && b->event && xchild(b->event, "distressBeacon");
+}
+
 int run_store_price(const Run* run, int sec, int slot) {
     const char* name = run->storeItem[sec][slot];
     if (!name[0]) return 0;
@@ -621,6 +664,7 @@ bool run_store_buy(Run* run, RunCtx* ctx, int sec, int slot) {
     }
     run->scrap -= price;
     name[0] = '\0';
+    store_commit(run);
     sound_play("buy");
     return true;
 }
@@ -943,7 +987,7 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
         } else if (!strcmp(n->name, "upgrade")) {
             upgrade(ctx, xattr(n, "system"), xattr_int(n, "amount", 1));
         } else if (!strcmp(n->name, "unlockShip")) {
-            if (profile_unlock(xattr_int(n, "id", -1), 0)) snprintf(g.note, sizeof(g.note), "A new ship is available in the hangar!");
+            if (!run->sandbox && profile_unlock(xattr_int(n, "id", -1), 0)) snprintf(g.note, sizeof(g.note), "A new ship is available in the hangar!");
         } else if (!strcmp(n->name, "quest")) {
             // A quest marker in this sector, else the next one (xftl InGameState.addQuest:
             // dropped from sector 7 on, so none land in the Last Stand).
@@ -989,7 +1033,7 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
         append(v->text, sizeof(v->text), "\n\n");
         append(v->text, sizeof(v->text), g.note);
     }
-    if (v->store) stock_store(run, s);
+    if (v->store) run_store_enter(run, ctx);
 
     // Choices, skipping blue options we don't qualify for.
     int groupsShown[8], groupCount = 0;  // max_group: one choice per group
@@ -1366,6 +1410,7 @@ static void generate_map(Run* run) {
     for (int attempt = 0; attempt < 16; attempt++) {
         memset(run->beacons, 0, sizeof(run->beacons));
         run->beaconCount = 0;
+        run->storeSavedCount = 0;
         int cellOf[MAX_BEACONS][2];
         bool finalSector = !strcmp(run->sectorType, "FINAL");
         // The Last Stand puts the Federation base in column 2-3 instead of an exit (xftl doc/sector-map).
@@ -1630,8 +1675,10 @@ static void arrive(Run* run, RunCtx* ctx) {
 
 void run_start(Run* run, RunCtx* ctx) {
     int difficulty = run->difficulty;
+    bool sandbox = run->sandbox;
     memset(run, 0, sizeof(*run));
     run->difficulty = difficulty;
+    run->sandbox = sandbox;
     run->fuel = 16;  // wiki: all ships start with 16 fuel
     // Starting scrap 30 / 10 / 0 on easy / normal / hard (wiki: Score).
     run->scrap = difficulty == DIFF_EASY ? 30 : difficulty == DIFF_HARD ? 0 : 10;
@@ -1757,6 +1804,7 @@ bool run_buy(Run* run, RunCtx* ctx, int item) {
             break;
     }
     run->scrap -= price;
+    store_commit(run);
     sound_play("buy");
     return true;
 }

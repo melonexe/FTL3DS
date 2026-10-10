@@ -269,7 +269,7 @@ int ship_list_blueprints(FtlDat* dat, ShipBlueprint* out, int max);
 
 // FTL's enemy generation (xftl ShipGenerator, normal difficulty): crew, optional systems and
 // system power grow with the sector (0-based). Writes a copy of `base` to `out`.
-void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sector);
+void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sector, int difficulty);
 
 // Collects regular enemy ships from data/autoBlueprints.xml (no bosses or special ships).
 int ship_list_enemies(FtlDat* dat, ShipBlueprint* out, int max);

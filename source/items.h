@@ -31,7 +31,9 @@ void items_free(void);
 
 const ItemDef* item_find(const char* name);                  // weapon, drone, augment or crew
 const SysBlueprint* item_system(int type);                   // SYS_*; NULL if unknown
-int items_of_kind(int kind, const ItemDef** out, int max);   // offered at random (rarity > 0)
+int items_of_kind(int kind, const ItemDef** out, int max);
+// Every item of a kind, store rarity or not (sandbox loadouts).
+int items_all_of_kind(int kind, const ItemDef** out, int max);   // offered at random (rarity > 0)
 
 // Scrap to buy the next reactor bar when the ship has `bars` (xftl ShipWindow: 30 below five,
 // then 20/25/30/35 per block of five), up to 25.

@@ -1,5 +1,6 @@
 #include "ship.h"
 
+#include "env.h"
 #include "items.h"
 
 #include <stdlib.h>
@@ -213,16 +214,28 @@ static int system_category(int type) {
     }
 }
 
-void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sector) {
+void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sector, int difficulty) {
+    // xftl ShipGenerator.buildShip (from a Reddit write-up of the game's own ShipGenerator): easy
+    // builds ships a sector behind, so its first sector is "sector -1".
+    int eff = sector - (difficulty == DIFF_EASY ? 1 : 0);
     *out = *base;
+    int crewSector = eff > 0 ? eff : 0;
     // Crew: min + (max - min) / 8 * sector.
     for (int i = 0; i < out->crewKinds; i++) {
         CrewCount* c = &out->crew[i];
-        c->amount = c->amount + (int)((c->max - c->amount) / 8.0f * sector);
+        c->amount = c->amount + (int)((c->max - c->amount) / 8.0f * crewSector);
     }
-    int pools[3] = {sector + 1, sector + 2, (sector + 1) / 2 > 1 ? (sector + 1) / 2 : 1};
-    // Optional systems: (sector * 10 + 20)% each, paid for from their category's pool.
-    int chance = sector * 10 + 20;
+    // The first sector on easy: no Zoltan shield.
+    if (sector == 0 && difficulty == DIFF_EASY) out->zoltanShield = false;
+    int pools[3];
+    pools[CAT_OFFENSIVE] = eff + 1 > 1 ? eff + 1 : 1;
+    pools[CAT_DEFENSIVE] = eff + 2 > 1 ? eff + 2 : 1;
+    pools[CAT_GENERAL] = (eff + 1) / 2 > 1 ? (eff + 1) / 2 : 1;
+    if (difficulty == DIFF_HARD) pools[CAT_GENERAL]++;
+    // Optional systems: sector x 10 + 10 / 20 / 30 % each by difficulty, paid for from their
+    // category's pool (1 power for offensive systems but artillery, and everything on hard; else 2).
+    int chance = sector * 10 + (difficulty == DIFF_EASY ? 10 : difficulty == DIFF_HARD ? 30 : 20);
+    if (chance < 10) chance = 10;
     for (int i = 0; i < base->optionalCount && out->systemCount < MAX_SYSTEMS; i++) {
         if (rand() % 100 >= chance) continue;
         bool taken = false;  // its room may already hold a system
@@ -230,16 +243,18 @@ void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sect
         if (taken) continue;
         out->systems[out->systemCount++] = base->optional[i];
         int cat = system_category(base->optional[i].type);
-        pools[cat] -= cat == CAT_OFFENSIVE && base->optional[i].type != SYS_ARTILLERY ? 1 : 2;
+        pools[cat] -= (cat == CAT_OFFENSIVE && base->optional[i].type != SYS_ARTILLERY) || difficulty == DIFF_HARD ? 1 : 2;
     }
-    // Soft caps: lerp from the starting power towards `max` by sector, plus 0-2.
+    // Soft caps: lerp from the starting power towards `max` by sector, plus a random 0-2 (0-1 on
+    // easy, none in easy's first sector).
+    int spread = eff < 0 ? 0 : difficulty == DIFF_EASY ? 1 : 2;
     int cap[MAX_SYSTEMS];
     for (int i = 0; i < out->systemCount; i++) {
         SystemDef* d = &out->systems[i];
         if (d->level < 1) d->level = 1;
         const SysBlueprint* sb = item_system(d->type);
         int mx = d->max > 0 ? d->max : sb ? sb->maxPower : d->level;
-        int limit = d->level + (int)((float)sector / 8 * (mx - d->level)) + rand() % 3;
+        int limit = d->level + (int)((float)eff / 8 * (mx - d->level)) + rand() % (spread + 1);
         cap[i] = limit < mx ? limit : mx;
     }
     // Spend the pools: offensive, then defensive, then the rest (plus leftovers) on anything.

@@ -384,6 +384,19 @@ def unlit(cgfx):
             c.combine_rgb = c.combine_alpha = 0
 
 
+def bind_mesh_nodes(cgfx):
+    """pycgfx leaves each mesh's mesh_node_name empty; Nintendo's banners name the node (bone) the
+    mesh hangs from, and the home menu looks it up (github.com/Epic0522/ClouDS-Music-FA,
+    tools/banner/convert_banner_cgfx.py, after Nintendo's AR Games banner). Without it a real 3DS
+    crashed on our multi-part scenes, reading through a null pointer."""
+    model = cgfx.data.models["COMMON"]
+    bone_names = list(model.skeleton.bones)
+    for mesh in model.meshes.data.contents:
+        shape = model.shapes.data.contents[mesh.shape_index]
+        bone = shape.primitive_sets.data.contents[0].related_bones.data.contents[0]
+        mesh.mesh_node_name = bone_names[bone]
+
+
 # ---- 128-byte alignment ----------------------------------------------------------------
 
 ALIGN = 128
@@ -547,6 +560,8 @@ def main(argv):
         print("no icon found in", exe)
         return 1
     icon.resize((48, 48), Image.LANCZOS).save(os.path.join(out_dir, "icon.png"))
+    if os.environ.get("BANNER_ICON_ONLY") == "1":  # the CIA's flat banner only needs the icon
+        return 0
 
     jingle(dat, os.path.join(out_dir, "banner.wav"))
     layers = os.environ.get("BANNER_LAYERS", "planet,rebels,logo,kestrel").split(",")
@@ -570,6 +585,8 @@ def main(argv):
     cgfx = pycgfx.convert_gltf(model)
     if not flat_lit:
         unlit(cgfx)
+    if os.environ.get("BANNER_NO_NODE_NAMES") != "1":  # (for comparing on hardware)
+        bind_mesh_nodes(cgfx)
     data = write_aligned(pycgfx, cgfx)
     with open(os.path.join(out_dir, "banner.cgfx"), "wb") as f:
         f.write(data)

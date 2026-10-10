@@ -1,0 +1,21 @@
+# Sandbox: SANDBOX on the main menu, the hangar (everything unlocked), the loadout screen, then a
+# run with the chosen weapons and no achievements.
+title 1
+seed 4
+at 1 expect menu == 1
+at 1.5 do tap 160 80
+at 2.5 expect menu == 2
+at 3 do key A
+at 4 expect menu == 6
+at 4 do key RIGHT
+at 4.5 do key DOWN
+at 5 do key RIGHT
+at 5.5 shot loadout
+at 7 do key A
+at 9 expect menu == 0
+at 9 expect sandbox == 1
+at 9 expect weapons >= 2
+at 9 do closeevents
+at 10 shot run
+at 10 log state
+at 11 done

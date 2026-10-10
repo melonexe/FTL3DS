@@ -1,161 +1,142 @@
 # FTL 3DS
 
-A from-scratch reimplementation of the FTL: Faster Than Light engine for Nintendo 3DS homebrew.
+A from-scratch reimplementation of the FTL: Faster Than Light engine for Nintendo 3DS homebrew:
+full runs from the hangar to the rebel flagship, on the 3DS's two screens.
 
 This repository contains **no FTL code or assets**. The game loads `ftl.dat` from your own copy of FTL
-(1.6 or later) at runtime. The engine is written from the community-documented data formats, without
-decompiling the original game.
+(1.6 or later) at runtime. The engine is written from the community-documented data formats and
+reverse-engineering notes, without decompiling the original game.
 
-## Status
+## Installing
 
-**Stage 5: combat.** Pick any player ship (including the Advanced Edition and Type C layouts) and
-fight random enemy ships from the game's own list. Destroy one and the next arrives a few seconds
-later; lose your ship and press A to start again.
+You need your own copy of FTL: Faster Than Light, version 1.6 or later (Steam, GOG, Humble...).
+Use an unmodded `ftl.dat`: Slipstream or Hyperspace mods change the file.
 
-- **Ships:** your ship on the left of the top screen, the enemy in a panel on the right, each with
-  hull, shields and evasion. Room interiors, system icons (green powered, grey off, orange/red
-  damaged), doors and weapons on the hull all come from `ftl.dat`.
-- **Crew:** named from the game's lists and placed at their stations. They walk through doors,
-  man systems (pilot, engines, shields, weapons, sensors, doors), repair damaged systems in their
-  room, suffocate without air and heal in the medbay.
-- **Weapons:** lasers, missiles, ion weapons, beams, flak and bombs with the game's stats, art and
-  sounds. Shields stop shots layer by layer and recharge; missiles and bombs ignore them; beams lose
-  one damage per layer and sweep across rooms; flak spreads over an area; ion locks systems for 5 s
-  per point. Engines and crew in the cockpit give evasion. Hits damage the hull, systems and crew and
-  can start fires and hull breaches.
-- **Drones:** combat drones (laser, beam, ion, missile) fly around the enemy and fire at random rooms;
-  defence drones shoot down incoming missiles and flak (Mark II also lasers); anti-drones stun enemy
-  drones; hull repair drones fix 3-5 hull; shield drones block a shot every 15 s. Deploying costs a
-  drone part, and a destroyed drone takes 10 s before it can be redeployed. Inside drones: repair
-  drones (25 HP) fight fires, seal breaches and repair at Engi speed; anti-personnel drones (150 HP)
-  hunt boarders; boarding drones (150 HP) breach the enemy hull and fight or sabotage.
-- **Hacking:** launch the hacking drone (1 part) at an enemy system; it can't be manned and repairs
-  at half speed while attached. A pulse (4/7/10 s by power) shuts the system down (shields lose a
-  layer every 2 s, weapons lose charge), then 20 s recharge.
-- **Mind control:** turns one enemy crew member in a room for 14/20/28 s (+15/+30 HP and more
-  damage at levels 2/3), then 20 s recharge. Slugs are immune.
-- **Zoltan:** Zoltan crew add a free power bar to the system they stand in; the Zoltan shield
-  (Zoltan ships) absorbs 5 points of damage (ion double, beams twice) and blocks boarding, hacking
-  and mind control; it refills each fight.
-- **Special weapons:** chain weapons charge faster with each volley, charge weapons store 2-3
-  volleys and fire them together, stun effects (3 s from missiles, longer from stun weapons), and
-  the Federation cruiser's artillery (charges in 50/40/30/20 s by power, fires an unaimed beam that
-  pierces all shields).
-- **Boarding:** the teleporter sends the crew standing in its room to an enemy room (20/15/10 s
-  recharge by level) and RETURN brings them home. Crew in the same room fight (3-7 damage per hit,
-  Mantis x1.5, Engi x0.5); boarders with no one to fight sabotage the room's system and move between
-  system rooms on their own. Enemies with a teleporter board you twice per fight and recall hurt
-  boarders. Killing the whole enemy crew wins the fight without destroying the ship. Hostile crew
-  have red-framed health bars (red rims as markers).
-- **Sensors:** level 1 shows your whole ship (otherwise only rooms with your crew), level 2 the
-  enemy's interior and crew, level 3 the enemy's weapon charge; manning adds a level. Hidden rooms
-  are dark but keep their system icons for targeting.
-- **Life support:** each room has its own oxygen (the game's model: open doors share air, open
-  airlocks, breaches and Lanius drain it, fires burn it). Fires spread between tiles and rooms,
-  damage crew and systems, and burn out without air; crew in a room fight its fires first, then seal
-  breaches, then repair its system, and the enemy sends crew to do the same.
-- **Sound:** the game's music and effects.
+**Easiest (Windows):** run `FTL2CIA.exe` from a release. It finds FTL in any Steam library or GOG
+folder (or you pick `ftl.dat`), asks where to save, and builds `ftl3ds.cia` with your game data
+inside. Install that CIA on the 3DS with FBI. It contains your copy of FTL's data: don't share it.
 
-The touchscreen has four tabs (tap them, or press X):
+**By hand:**
 
-- **CREW:** a map of your ship with a crew bar underneath, plus OPEN ALL / CLOSE ALL for the doors.
-- **FIGHT:** a map of the enemy ship for targeting, and a card per weapon with its charge, status and
-  power button. AUTO keeps weapons firing at their target; with it off, each targeting fires one
-  volley, as in the original.
-- **SYS:** drone cards (tap to deploy / switch off) and special systems: cloaking (5 s per power,
-  +60% evasion, enemy weapons stop charging, 20 s recharge), backup battery (+2 reactor bars per
-  level for 30 s), the clone bay (revives dead crew in 12/9/7 s by power) and the teleporter (tap
-  the card, then a room on the fight tab; its RETURN button brings your boarders back).
-- **POWER:** the reactor and every system's power bars.
+1. Copy `ftl.dat` from your FTL folder (Steam: right-click FTL > Manage > Browse local files) to
+   `sdmc:/3ds/ftl3ds/ftl.dat` on the SD card.
+2. Install the release's `ftl3ds.cia` with FBI, or copy `ftl3ds.3dsx` to `sdmc:/3ds/` and start it
+   from the Homebrew Launcher.
 
-**Runs.** The game starts a run: eight sectors of beacons generated the way FTL does it (xftl's
-notes on the sector map), with FTL's own event scripts from `ftl.dat`: the text, choices (blue
-options when you have the system, crew race or weapon), rewards from FTL's loot tables, crew
-joining or leaving, damage, hostile ships and stores. Between fights the PAUSE button becomes JUMP
-and opens the sector map. Jumping costs 1 fuel and the rebel fleet (red) advances each jump. Tap a
-blue-ringed beacon to jump; at the exit, NEXT SECTOR moves on. Stores sell fuel, missiles, drone
-parts and hull repair. Winning a fight plays that ship's destroyed or crew-killed event.
-Stores have FTL's sections (systems, weapons, drones, augments, crew; layout rules from xftl) and
-a SELL tab at half price. The SHIP button opens upgrades (system levels and reactor bars at FTL's
-costs) and equipment (weapon and drone slots, augments, a 4-slot cargo hold). Event rewards give real
-weapons, drones, augments and crew. Enemies scale with the sector using FTL's generator (via xftl).
-In a fight the FTL drive charges (wiki charge times by engine power) and JUMP escapes when it's full.
-Text uses FTL's own bitmap fonts at 1:1 pixels.
-Every obtainable augment works (wiki: Augmentations), including the ships' own (they take augment
-slots, as in FTL): Defense Scrambler, Hacking Stun, Zoltan Shield Bypass, Fire Suppression, Backup
-DNA Bank, Reconstructive Teleport, Adv. FTL Navigation (jump to any visited beacon), Distraction
-Buoys, FTL Jammer, Lifeform Scanner (life signs in rooms the sensors can't see; a Slug aboard does
-the same), Long-Ranged Scanners (ships and hazards at neighbouring beacons on the map), Crystal
-Vengeance, Engi Med-bot Dispersal, Drone Reactor Booster, Mantis Pheromones, Rock Plating, Slug Repair
-Gel, Titanium System Casing and the Zoltan shield, besides the re-loader, boosters, arms, armour and
-the rest. Enemies surrender or try to escape at their scripted hull thresholds.
-Lockdown: a Crystal crew member selected alone gets a LOCKDOWN button (crew tab) that coats their
-room in crystal for 12 s (nobody walks in or out; 50 s recharge, ready again after a jump); the
-Crystal Lockdown Bomb does the same to an enemy room. The Ion Intruder drone boards like a boarding
-drone and every 8.2-10 s ionises the system it stands by (3 ion) and stuns the crew there for 6 s.
-Stores stock each sector's loot table (its rarity list in `sector_data.xml`), and crew for hire may
-come trained in one or two skills, more often later in the run (our numbers: the wiki gives none).
-Crew skills (wiki: Crew skills): piloting and engines train on dodges, shields on blocked hits,
-weapons on each volley, repair on each repaired bar, combat on kills and sabotage. Levels 1 and 2
-raise the manning bonuses (evasion +5/7/10%, shield recharge +10/20/30%, weapon charge -10/15/20%,
-FTL charge by the wiki's table), repair speed and hand-to-hand damage; cloning keeps 80% of the
-experience. Select one crew member to see their skills at the bottom left of the top screen.
-Beacon hazards (wiki: Environmental Hazards; xftl's environment code): asteroid fields fire waves
-of asteroids at both ships, timed by our shield level; a sun sends solar flares that start fires;
-a pulsar ionises systems; anti-ship batteries fire 3-damage, shield-piercing, breaching shots;
-nebulas blind the sensors and slow the rebel fleet; ion storms halve the reactor. A badge on the
-top screen names the hazard and counts down to the next flare, pulse or shot. With a hazard the
-FTL drive has to charge even without an enemy, and the ship menu is locked.
-The Last Stand (sector 8; wiki: The Rebel Flagship, xftl FlagshipBoss): the Federation base sits
-in the map's middle columns and the rebel flagship heads for it, jumping every second turn (its
-next jump is drawn on the map); three turns at the base and the game is lost. Meeting it starts
-its stage: stage 1 with four weapon rooms, hacking and cloaking; stage 2 with drones and power
-surges of six extra drones; stage 3 with a 12-point Zoltan shield, teleporter and mind control,
-and surges of seven lasers (every fourth restores the shield). Each stage's weapons are artillery
-systems at FTL's charge times, their guns drawn on the hull; its crew carries over between stages;
-with them all dead the AI flies it (systems count as manned, damage repairs a bar per 20 s each,
-our rate); beating stage 3 wins the run.
-The game opens on FTL's main menu (CONTINUE, NEW GAME, OPTIONS, QUIT) with a hangar to choose the
-ship, type and difficulty (easy / normal / hard: starting scrap, rewards and enemy targeting as in
-FTL). It saves whenever the ship is at rest and CONTINUE resumes there; the run's end deletes the
-save. START pauses (resume, options with music and effects volume, main menu, quit).
-Ships unlock as in FTL (wiki: Ships): only the Kestrel at first; the Engi on reaching sector 5
-with it; each other ship's Type A from its quest event or by beating the flagship with the ship
-before it; Type B from two of the ship's three achievements, Type C by reaching sector 8 with
-Type B; the Lanius after four ships, the Crystal after A and B victories with every other ship.
-All of FTL's achievements (data/achievements.xml) are tracked, with a popup when earned and the
-list under STATS; progress is kept in sdmc:/3ds/ftl3ds/profile.txt. Ancestry (the Crystal sector)
-can't be earned yet: there's no secret sector.
-With the 3D slider up the top screen is stereoscopic: the stars sit behind the ships and the
-readouts in front. The flagship uses FTL's layout for the difficulty (hard links its weapon rooms
-to the rest of the ship).
+For sound the SD card needs `sdmc:/3ds/dspfirm.cdc`; run [DSP1](https://github.com/zoogie/DSP1)
+once to dump it if you don't have it (without it the game runs silently and says so).
+
+The game reads `romfs:/ftl.dat` first, then `sdmc:/3ds/ftl3ds/ftl.dat`, then `sdmc:/ftl.dat`.
+Saves, settings and profile progress live in `sdmc:/3ds/ftl3ds/`.
+
+It also runs in Azahar or Citra with `ftl.dat` at the same path on the emulator's SD card; there any
+file named `3ds/dspfirm.cdc` enables sound.
+
+## What's in the game
+
+**Menus and saving.** FTL's main menu: CONTINUE, NEW GAME, SANDBOX, STATS, OPTIONS, QUIT. The
+hangar picks the ship, its type (A/B/C) and the difficulty (easy / normal / hard: starting scrap,
+rewards, enemy strength and targeting as in FTL). The game saves whenever the ship is at rest and
+CONTINUE resumes there; the run's end deletes the save. START pauses (resume, options with music
+and effects volume, main menu, quit).
+
+**Runs.** Eight sectors on FTL's sector map, each a map of beacons generated the way FTL does it
+(xftl's notes), with FTL's own event scripts from `ftl.dat`: text, choices (blue options for a
+system, crew race, weapon or augment you have), rewards from FTL's loot tables, crew joining or
+leaving (a clone bay can save some), damage, hostile and friendly ships, quests and stores.
+Jumping costs 1 fuel and the rebel fleet advances each turn (slower in nebulas); with no fuel, WAIT.
+- **The map** marks what FTL marks (wiki: Beacon): the exit always, quests from any distance,
+  stores and distress beacons once you've been next to them. Long-Ranged Scanners add ships and
+  hazards at neighbouring beacons; nebulas show as clouds.
+- **Stores** have FTL's sections (systems, weapons, drones, augments, crew; layout rules from
+  xftl), stock from the sector's loot table, fuel, missiles, drone parts, hull repair and a SELL
+  tab at half price. Each store remembers its stock, so you can go back. Crew for hire may come
+  trained, more often later in the run (our numbers: the wiki gives none).
+- **Ships at beacons:** an event's ship is in view while its text is up; one that surrenders or
+  makes peace, or whose crew you killed, stays until you jump. Enemies surrender or try to escape
+  at their scripted hull thresholds, and an escaping ship charges its FTL drive.
+- **Enemies** are built with FTL's generator as reverse-engineered by xftl: power pools by sector
+  and difficulty, optional systems, and weapons drawn from each race's list to fill the weapons
+  system's power.
+- **The SHIP menu** (locked in a fight, with intruders aboard or in a dangerous hazard) has
+  upgrades at FTL's costs and equipment: weapon and drone slots, augments and a 4-slot cargo hold.
+- **Hazards** (wiki: Environmental Hazards; xftl): asteroid fields, suns (solar flares), pulsars
+  (ion pulses), anti-ship batteries, nebulas (blinded sensors, drifting clouds on screen) and ion
+  storms (half the reactor). A badge names the hazard and counts down; with a hazard the FTL drive
+  has to charge even without an enemy.
+- **The Last Stand** (wiki: The Rebel Flagship; xftl FlagshipBoss): the flagship heads for the
+  Federation base, jumping every second turn; three turns there and the run is lost. Its three
+  stages: four weapon rooms with hacking and cloaking; drones and power surges; a 12-point Zoltan
+  shield, teleporter and mind control with laser surges. Its crew carries over; with them all dead
+  its AI flies it. Beating stage 3 wins.
+
+**Combat.** Your ship on the top screen, the enemy in a panel beside it.
+- **Weapons:** lasers, missiles, ion, beams, flak, bombs, chain and charge weapons, stun, lockdown
+  and healing bombs, with the game's stats, art and sounds and Mike Hopley's measured speeds.
+  Shields stop shots layer by layer; missiles and bombs ignore them; beams lose a point per layer.
+  Hit or miss is decided as a shot arrives (so cloaking dodges shots already on their way).
+- **Systems:** shields, engines, piloting, oxygen, medbay or clone bay, sensors, doors, weapons,
+  drones, cloaking, backup battery, teleporter, hacking, mind control and artillery, each with
+  FTL's numbers.
+- **Drones:** combat, defence, anti-drone, hull repair, shield, crew repair, anti-personnel,
+  boarding and ion intruder drones.
+- **Boarding:** teleport crew over and back; crew fight hand to hand and sabotage systems; enemy
+  ships board you and recall hurt boarders; killing the whole crew wins without the explosion.
+- **Augments:** every obtainable augment works, including each ship's own.
+- **Crystal crew** can lock a room down; **Zoltan crew** power the system they stand in.
+
+**Crew.** Named from the game's lists; they walk, man stations, repair, fight fires, seal
+breaches, suffocate and heal. Skills train as in FTL (wiki: Crew skills) and raise the manning
+bonuses; cloning keeps 80% of the experience. Each room has its own oxygen (open doors share air;
+airlocks, breaches and Lanius drain it; fires burn it); fires spread, damage and burn out.
+
+**Unlocks and achievements.** Ships unlock as in FTL (wiki: Ships): the Kestrel at first; the
+Engi on reaching sector 5 with it; other ships from their quests or by beating the flagship with
+the ship before them; Type B from two of a ship's three achievements, Type C by reaching sector 8
+with Type B; the Lanius after four ships, the Crystal after A and B wins with every other ship. All
+of FTL's achievements are tracked, with popups and a list under STATS.
+
+**Sandbox.** SANDBOX on the main menu opens the hangar with every ship unlocked, then a loadout
+screen where each weapon, drone and augment slot can hold anything in the game (the weapons system
+grows to power it). Sandbox runs earn no achievements or unlocks.
+
+**On the 3DS.** FTL's own bitmap fonts at 1:1 pixels, the game's music (explore and battle
+versions crossfading) and effects, stereoscopic 3D (stars behind, readouts in front), and assets
+loaded and freed as needed to fit the 3DS's memory.
+
+**Not there yet:** the tutorial, the secret Crystal sector (so Ancestry can't be earned), and a 3D
+home-menu banner (tried; it crashed the real HOME Menu, so the CIA has a flat banner).
+
+## Controls
+
+The touchscreen has four tabs (tap them, or press X): **CREW** (your ship map, crew bar, door and
+station buttons), **FIGHT** (the enemy map for targeting, a card per weapon, AUTO fire), **SYS**
+(drones and special systems) and **POWER** (the reactor and every system's bars). Between fights
+the top-left buttons are SHIP and JUMP.
 
 | Input | Action |
 |---|---|
-| Tap a crew member (on the map or in the crew bar) | Select them |
-| Tap a room | Send the selected crew member there (its station first, then the nearest free tile) |
+| Tap a crew member (map or crew bar), or drag a box | Select them |
+| Tap a room, or another crew member's tile | Send the selected crew there (station first, then the nearest free tile) |
 | Tap a door | Hold it open / close it (airlocks vent the room to space) |
-| Tap a weapon card, then an enemy room | Power the weapon and target that room (tap the room again to cancel) |
+| Tap a weapon card, then an enemy room | Power the weapon and target that room |
 | Beams: tap the card, then drag across the enemy | Set the beam's path; rooms it will hit turn red |
-| Tap a weapon's ON/OFF button | Power it on or off |
-| Tap a drone card (sys tab) | Deploy / power the drone, or switch it off |
-| Tap Cloaking / Backup Battery (sys tab) | Activate it |
-| Tap a power bar | Power the system up to that bar (tap the top lit bar to remove it) |
-| Tap a system icon | Switch the system fully on or off |
-| A, or the PAUSE button | Pause / resume (A after losing: restart the run) |
-| JUMP (between fights) | Open the sector map |
-| L + R + Y | Debug: start a fire and a hull breach on your ship |
-| L + R + B | Debug: destroy the enemy ship |
-| SELECT | Debug menu: pick any player ship and enemy and start that one-off fight, or a new run with that ship, plus quick actions (destroy enemy, kill crew, fire + breach, repair, boarding both ways, +missiles/parts/power/scrap/fuel, enemy hold fire, clear cooldowns, break enemy systems, full sensors) |
+| Tap a drone card or a system card (SYS tab) | Deploy / activate it |
+| Tap a power bar or system icon | Set the system's power |
+| A, or the PAUSE button | Pause / resume (A after losing: back to the menu) |
 | X | Next tab |
-| Y / B | Select next crew member / deselect |
-| START | Pause menu (options, main menu, quit) |
+| Y / B | Select the next crew member / deselect |
+| START | Pause menu |
+| SELECT | Debug menu (any ship and enemy, quick actions) |
+| L + R + Y / L + R + B | Debug: fire and breach on your ship / destroy the enemy |
 
-Game numbers come from the FTL wiki (ftl.fandom.com), Mike Hopley's measurements
-(mikehopley.github.io) and xftl's reverse engineering (gitlab.com/znixian/xftl): repair takes 12.5 s per bar for a Human, crew walk 2.2 tiles/s, shield layers
-recharge in 2 s, oxygen refills at 1.2 / 4.8 / 8.4 % per second, weapons travel at their game speeds,
-fires spread on a 10-49 countdown, and so on. The few values no source gives (door animation speed,
-beam sweep time) are marked as our own choice at the top of `combat.c` and `life.c`.
+## Where the numbers come from
+
+The FTL wiki (ftl.fandom.com), Mike Hopley's measurements (mikehopley.github.io) and xftl's reverse
+engineering (gitlab.com/znixian/xftl): repair takes 12.5 s per bar for a Human, crew walk 2.2
+tiles/s, shield layers recharge in 2 s, oxygen refills at 1.2 / 4.8 / 8.4 % per second, and so on.
+The few values no source gives (door animation speed, the jump animation, some rates) are marked as
+our own choice where they're defined.
 
 ## Building
 
@@ -164,28 +145,25 @@ beam sweep time) are marked as our own choice at the top of `combat.c` and `life
    ```
    pacman -S 3ds-zlib 3ds-libpng 3ds-libvorbisidec
    ```
-3. From the same terminal, run `make` in this folder. This produces `ftl3ds.3dsx`.
+3. From the same terminal, run `make` in this folder. This produces `ftl3ds.3dsx` and `ftl3ds.elf`.
 
-## Running
+### CIAs and releases
 
-1. Copy `ftl.dat` from your FTL install folder to `sdmc:/3ds/ftl3ds/ftl.dat` on your SD card.
-   Use an unmodded copy: Slipstream or Hyperspace mods change the file.
-2. Copy `ftl3ds.3dsx` to `sdmc:/3ds/` and launch it from the Homebrew Launcher.
-3. For sound, your SD card needs `sdmc:/3ds/dspfirm.cdc`. If you don't have it, run the
-   [DSP1](https://github.com/zoogie/DSP1) homebrew once to dump it from your console. Without it the
-   game runs silently and says so on the touchscreen.
+These need makerom.exe (3DSGuy/Project_CTR) in `tools/cia/` and bannertool
+(diasurgical/bannertool) in `tools/cia/bt/`, and `make` run first.
 
-You can also run it in an emulator such as Azahar or Citra by putting `ftl.dat` at the same path on the
-emulator's virtual SD card. Emulators emulate the DSP themselves, so any file named
-`3ds/dspfirm.cdc` on the virtual SD card enables sound; it doesn't need to be a real dump.
+- **Release:** `tools/release.sh [version]` packs `dist/ftl3ds-<version>.zip`: FTL2CIA, the
+  `.3dsx`, a public CIA (`PUBLIC=1 tools/cia/build_cia.sh`: empty romfs, generated starfield icon
+  and banner) and install notes. It refuses to package anything that looks like it holds an
+  `ftl.dat`.
+- **FTL2CIA:** `tools/installer/build_installer.sh` packages `tools/installer/ftl2cia.py` as
+  `dist/FTL2CIA.exe` (needs Python with PyInstaller, pefile and Pillow). It carries only the
+  engine, makerom, bannertool and the generated banner.
+- **Personal CIA:** `tools/cia/build_cia.sh "<path to your ftl.dat>"` builds `ftl3ds.cia` with your
+  `ftl.dat` inside and FTL's own icon. For your own console only.
 
-## Test CIA (personal use)
-
-`tools/cia/build_cia.sh "<path to your ftl.dat>"` (after `make`) builds `ftl3ds.cia` with your own
-ftl.dat inside its romfs, so nothing needs copying to the SD card. It downloads nothing: put
-makerom.exe (3DSGuy/Project_CTR) and bannertool (diasurgical/bannertool, in `tools/cia/bt/`) in
-`tools/cia/` first. The CIA contains Subset Games' data, so it's for testing on your own console
-only; never share it. The game reads `romfs:/ftl.dat` first, then the SD card paths.
+`.gitignore` keeps `ftl.dat` (any letter case), romfs folders, CIAs, builds and anything else made
+from FTL's files out of the repository.
 
 ## Scenario tests
 
@@ -204,38 +182,47 @@ the game, acting on its state directly rather than by tapping the screen:
 ```
 boss 1                     # setup: a fight with flagship stage 1 (see source/testhooks.h for all keys:
 ship 1                     #   ship, enemy, event, crew, tab, seed, weapons, enemyfire, enemyhull,
-tab fight                  #   paused, board, skills, memory, env, boss, laststand)
+tab fight                  #   paused, board, skills, memory, env, boss, laststand, title)
 at 1 expect artillery == 4 # PASS or FAIL in the log
-at 2 do target 1 shields   # act: target, destroy, jump, wait, choose, surge, ... (test/test_exec.inc)
+at 2 do target 1 shields   # act: target, destroy, jump, wait, choose, key, tap, ... (test/test_exec.inc)
 at 3 shot fighting         # the runner screenshots the Azahar window
-at 4 log state             # a line of game state
+at 4 log state             # a line of game state (fps, memory and more)
 at 5 done
 ```
 
 The runner copies the scenario to the emulated SD card, starts Azahar with the test build, follows
 `test.log`, saves screenshots to `build_test/scenarios/<name>/`, and ends with a pass / fail count.
-It won't take over the screen while someone is using the PC (`-Force` to override).
+It won't take over the screen while someone is using the PC (`-Force` to override). Test runs keep
+their own profile (`profile_test.txt`, everything unlocked).
 
 ## PC tools
 
 - `tools/ftldat.py list|extract <ftl.dat> ...` lists and extracts archive files.
 - `tools/preview.py <ftl.dat>` writes `build/preview.html`, which renders every player ship with the
-  same maths as the 3DS code. It's useful for checking layout changes without a console.
+  same maths as the 3DS code.
 
 ## Code layout
 
 | File | Purpose |
 |---|---|
-| `source/ftldat.c` | `ftl.dat` (PKG) archive reader with zlib inflation |
-| `source/texture.c` | PNG to 3DS GPU texture conversion (tiling, power-of-two padding) |
-| `source/xml.c` | Minimal tag/attribute scanner for FTL's XML |
-| `source/ship.c` | Blueprints (crew, systems, reactor), layout parsing, walkable tile grid, power |
-| `source/anim.c` | Sprite sheets and animations from `animations.xml` / `dlcAnimations.xml` |
+| `source/main.c` | Main loop, menus, hangar, cameras, drawing, touch input, achievements hooks |
+| `source/combat.c` | Weapons, shields, evasion, projectiles, beams, drones, boarding, hacking, mind control, hazards, the flagship, enemy AI |
+| `source/run.c` | Runs: sector and beacon maps, events, rewards, stores, the rebel fleet, the Last Stand |
+| `source/ship.c` | Blueprints, layouts, the walkable grid, power, enemy ship generation |
+| `source/crew.c` | Crew races, names, spawning, pathfinding, movement, manning, skills |
+| `source/life.c` | Doors, oxygen, fires, breaches, suffocation, medbay and clone bay |
+| `source/weapon.c` | Weapon and drone blueprints, blueprint lists |
+| `source/items.c` | Store items, systems for sale and their prices |
+| `source/profile.c` | Ship unlocks, achievements and victories (`profile.txt`) |
+| `source/save.c` | Saving and continuing a run |
+| `source/sound.c` | Sound effects (WAV/OGG, resampled to the DSP's rate) and streamed music |
+| `source/font.c` | FTL's bitmap fonts |
+| `source/anim.c` | Sprite sheets and animations from `animations.xml` |
+| `source/texture.c` | PNG to 3DS GPU textures |
+| `source/text.c` | Display text from the `text_*.xml` files |
+| `source/xmldom.c`, `source/xml.c` | XML trees (events) and a light tag scanner |
+| `source/ftldat.c` | `ftl.dat` (PKG) archive reader |
 | `source/system.c` | System types, subsystems and default stations |
-| `source/text.c` | Display names from `text_blueprints.xml` / `text_misc.xml` |
-| `source/weapon.c` | Weapon blueprints and blueprint lists |
-| `source/combat.c` | Weapons, shields, evasion, projectiles, damage, repairs, enemy AI |
-| `source/life.c` | Doors, oxygen, venting, suffocation and medbay healing |
-| `source/crew.c` | Crew races, names, spawning, pathfinding, movement and manning |
-| `source/sound.c` | Sound effects (WAV/OGG) and streamed music through the DSP |
-| `source/main.c` | Main loop, cameras, drawing and touch input |
+| `source/feats.h`, `source/env.h` | Achievement bookkeeping; hazards and difficulty |
+| `test/` | The test build's scenario runner (`make TEST=1` only) |
+| `tools/` | CIA and release scripts, FTL2CIA, scenario runner, PC tools |

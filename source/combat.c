@@ -70,6 +70,16 @@ static void play_random(const char (*sounds)[24], int count) {
     if (count > 0) sound_play(sounds[rand() % count]);
 }
 
+// Whether a shot is dodged, rolled when it's fired so its path can be drawn going past; resolve()
+// corrects it for any change in the target's evasion while it flew (cloaking against shots already
+// on their way works, as in FTL, where evasion counts when the shot arrives).
+static void roll_miss(Projectile* p, int evade) {
+    if (evade < 0) evade = 0;
+    if (evade > 100) evade = 100;
+    p->evade = (signed char)evade;
+    p->miss = rand() % 100 < evade;
+}
+
 static bool shield_drone_absorbs(Combat* c, int side);
 static int free_tiles(const Ship* s, const CrewSet* cs, int room, int out[][2], int max, bool foreign);
 static void drones_sync(Ship* s);
@@ -239,6 +249,7 @@ void combat_arm(Ship* s, FtlDat* dat, const AnimDb* db) {
     const char* names[MAX_WEAPON_SLOTS];
     int count = 0;
     for (int i = 0; i < bp->weaponCount; i++) names[count++] = bp->weapons[i];
+    sEnemyHasWeapons = count > 0;  // a fixed weapon list (bosses, events) is assumed to do the job
 
     if (count == 0 && bp->weaponLoad[0]) {
         // Enemies (xftl ShipGenerator): fill the weapons system's power with weapons that each use
@@ -757,6 +768,7 @@ static void fire_shot(Combat* c, int side, int wi) {
             if (!c->shots[i].active) p = &c->shots[i];
         if (!p) break;
         memset(p, 0, sizeof(*p));
+        p->evade = -1;
         p->active = true;
         p->from = side;
         p->weapon = wi;
@@ -781,7 +793,7 @@ static void fire_shot(Combat* c, int side, int wi) {
             p->duration = fire_delay(w->def) + dist / (w->def->speed > 0 ? w->def->speed : 60) + n * 0.05f;
         }
         p->speed = (float)w->def->speed;
-        p->miss = rand() % 100 < evasion(c, o);
+        roll_miss(p, evasion(c, o));
     }
 }
 
@@ -796,6 +808,7 @@ static void fire_artillery_shot(Combat* c, int side, int k) {
         if (!c->shots[i].active) p = &c->shots[i];
     if (!p) return;
     memset(p, 0, sizeof(*p));
+    p->evade = -1;
     p->active = true;
     p->from = side;
     p->weapon = SHOT_ART(k);
@@ -813,7 +826,7 @@ static void fire_artillery_shot(Combat* c, int side, int k) {
     float dist = side == SIDE_PLAYER ? DIST_TO_ENEMY : DIST_TO_PLAYER;
     p->duration = fire_delay(w->def) + dist / (w->def->speed > 0 ? w->def->speed : 60);
     p->speed = (float)w->def->speed;
-    p->miss = rand() % 100 < evasion(c, o);
+    roll_miss(p, evasion(c, o));
 }
 
 // Crystal Vengeance: a shard from the damaged ship (`side`) at a random room of the other.
@@ -827,6 +840,7 @@ static void shard_shot(Combat* c, int side) {
     if (!p) return;
     const WeaponDef* d = combat_shot_def(c, side, SHOT_SHARD, -1);
     memset(p, 0, sizeof(*p));
+    p->evade = -1;
     p->active = true;
     p->from = side;
     p->weapon = SHOT_SHARD;
@@ -839,7 +853,7 @@ static void shard_shot(Combat* c, int side) {
     float dist = side == SIDE_PLAYER ? DIST_TO_ENEMY : DIST_TO_PLAYER;
     p->duration = dist / d->speed;
     p->speed = (float)d->speed;
-    p->miss = rand() % 100 < evasion(c, o);
+    roll_miss(p, evasion(c, o));
     play_random(d->launch, d->launchCount);
 }
 
@@ -965,6 +979,15 @@ static void resolve(Combat* c, Projectile* p) {
         int eng = ship_find_system(s, SYS_ENGINES);
         bool maxed = eng >= 0 && s->systems[eng].def->level >= 8 && ship_system_power(s, eng) >= 8;
         gFeats.fight.hitStreak = p->miss || !maxed ? 0 : gFeats.fight.hitStreak + 1;
+    }
+    if (!p->shotDown && p->evade >= 0) {
+        // Evasion now against when it was rolled: flip with the probability that makes the overall
+        // chance of a miss the evasion at arrival.
+        int now = evasion(c, s);
+        if (now > 100) now = 100;
+        float r = rand() / (float)RAND_MAX;
+        if (!p->miss && now > p->evade && r < (now - p->evade) / (float)(100 - p->evade)) p->miss = true;
+        else if (p->miss && now < p->evade && r < (p->evade - now) / (float)p->evade) p->miss = false;
     }
     if (p->shotDown) {  // a defence drone got it
         add_effect(c, side, FX_EXPLOSION, p->tx, p->ty);
@@ -1751,6 +1774,7 @@ static void drone_fire(Combat* c, DroneEntity* e) {
             Projectile* p = &c->shots[i];
             if (p->active) continue;
             memset(p, 0, sizeof(*p));
+            p->evade = -1;
             p->active = true;
             p->from = e->side;
             p->weapon = -1;
@@ -1763,7 +1787,7 @@ static void drone_fire(Combat* c, DroneEntity* e) {
             float dist = hypotf(p->tx - p->sx, p->ty - p->sy);
             p->speed = (float)(w->speed > 0 ? w->speed : 60);
             p->duration = dist / (p->speed * DRONE_SHOT_PX) + 0.05f;
-            p->miss = rand() % 100 < evasion(c, o);
+            roll_miss(p, evasion(c, o));
             break;
         }
     }
@@ -2387,7 +2411,8 @@ static void update_hack_mind(Combat* c, int side, float dt) {
             if (h >= 0) o->systems[h].ionTimer += HACK_RECHARGE;
         }
     }
-    // Mind control wears off.
+    // Mind control wears off (both ships' crews at once: this is called for each side, so only once).
+    if (side != SIDE_PLAYER) return;
     CrewSet* sets[2] = {c->crew[0], c->crew[1]};
     for (int k = 0; k < 2; k++)
         for (int i = 0; i < sets[k]->count; i++) {
@@ -2403,7 +2428,6 @@ static void update_hack_mind(Combat* c, int side, float dt) {
                 sound_play("mindControlEnd");
             }
         }
-    (void)side;
 }
 
 // Enemy: launch a hacking drone at our shields (or weapons), pulse whenever ready; mind-control
@@ -2498,6 +2522,7 @@ static void hazard_shot(Combat* c, int side, int kind) {
         Projectile* p = &c->shots[i];
         if (p->active) continue;
         memset(p, 0, sizeof(*p));
+        p->evade = -1;
         const WeaponDef* d = combat_shot_def(c, !side, kind, -1);
         p->active = true;
         p->from = !side;
@@ -2511,7 +2536,7 @@ static void hazard_shot(Combat* c, int side, int kind) {
         p->sy = p->ty + sinf(a) * dist;
         p->speed = (float)d->speed;
         p->duration = dist / (p->speed * DRONE_SHOT_PX);
-        p->miss = rand() % 100 < evasion(c, s);
+        roll_miss(p, evasion(c, s));
         return;
     }
 }
@@ -2721,6 +2746,7 @@ static void surge_laser(Combat* c, int side) {
         Projectile* p = &c->shots[i];
         if (p->active) continue;
         memset(p, 0, sizeof(*p));
+        p->evade = -1;
         p->active = true;
         p->from = side;
         p->weapon = SHOT_SURGE;
@@ -2732,7 +2758,7 @@ static void surge_laser(Combat* c, int side) {
         float dist = side == SIDE_PLAYER ? DIST_TO_ENEMY : DIST_TO_PLAYER;
         p->speed = (float)(sSurgeDef.speed > 0 ? sSurgeDef.speed : 60);
         p->duration = fire_delay(&sSurgeDef) + dist / p->speed + (rand() % 40) / 100.0f;
-        p->miss = rand() % 100 < evasion(c, o);
+        roll_miss(p, evasion(c, o));
         return;
     }
 }
@@ -2779,7 +2805,17 @@ void combat_update(Combat* c, float dt) {
     if (!c->ship[SIDE_PLAYER]) return;
     if (!c->ship[SIDE_ENEMY]) {
         // No enemy: the crew still repair, fight fires and seal breaches, intruders left aboard
-        // still fight, ion wears off and the battery / cloak run out.
+        // still fight, ion wears off and the battery / cloak run out. Mind control ends with the
+        // ship that cast it.
+        CrewSet* pc = c->crew[SIDE_PLAYER];
+        for (int i = 0; i < pc->count; i++) {
+            Crew* m = &pc->crew[i];
+            if (m->mind <= 0.0f) continue;
+            m->mind = 0.0f;
+            m->foreign = !m->foreign;
+            m->mindBoost = 0;
+            if (m->health > pc->races[m->race].maxHealth) m->health = pc->races[m->race].maxHealth;
+        }
         update_systems(c, SIDE_PLAYER, dt);
         update_shields(c, SIDE_PLAYER, dt);
         update_environment(c, dt);  // asteroids, flares and the like don't need an enemy
@@ -2863,6 +2899,27 @@ void combat_update(Combat* c, float dt) {
             // The ship goes up in a burst of explosions across its rooms, and breaks apart.
             Ship* s = c->ship[dead];
             s->deathTime = 0.0f;
+            if (dead == SIDE_ENEMY) {
+                // Our crew still aboard go down with it: lost, but a clone bay can bring them back.
+                CrewSet* away = c->crew[SIDE_ENEMY];
+                CrewSet* home = c->crew[SIDE_PLAYER];
+                Ship* ps = c->ship[SIDE_PLAYER];
+                int cb = ship_find_system(ps, SYS_CLONEBAY);
+                bool clone = cb >= 0 && (ship_system_capacity(ps, cb) > 0 || ps->aug[AUG_BACKUP_DNA]);
+                for (int i = 0; i < away->count; i++) {
+                    const Crew* m = &away->crew[i];
+                    if (m->drone || !crew_is_ours(c, SIDE_ENEMY, m)) continue;
+                    gFeats.fight.ourCrewLost++;
+                    gFeats.ourDeaths++;
+                    int race = crew_race_look(home, away->races[m->race].name, away->races[m->race].look);
+                    if (!clone || race < 0 || home->cloneCount >= MAX_CREW) continue;
+                    home->cloneQueue[home->cloneCount].race = race;
+                    home->cloneQueue[home->cloneCount].female = m->female;
+                    memcpy(home->cloneQueue[home->cloneCount].name, m->name, sizeof(home->cloneQueue[0].name));
+                    memcpy(home->cloneQueue[home->cloneCount].xp, m->xp, sizeof(m->xp));
+                    home->cloneCount++;
+                }
+            }
             c->crew[dead]->count = 0;
             for (int i = 0; i < s->gibCount; i++) {
                 Gib* g = &s->gibs[i];

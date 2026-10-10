@@ -4534,7 +4534,20 @@ static bool save_continue(ShipSlots* pl, FtlDat* dat, const AnimDb* db, const Na
             const SystemDef* def = NULL;
             for (int o = 0; o < s->bp->optionalCount && !def; o++)
                 if (s->bp->optional[o].type == ss.sys[k].type) def = &s->bp->optional[o];
-            if (def) si = ship_install_system(s, dat, def);
+            // A clone bay bought in place of the medbay (or the reverse) takes over its room.
+            int t = ss.sys[k].type, other = -1;
+            if (t == SYS_CLONEBAY || t == SYS_MEDBAY) {
+                int ot = t == SYS_CLONEBAY ? SYS_MEDBAY : SYS_CLONEBAY;
+                bool savedOther = false;
+                for (int o = 0; o < ss.systemCount; o++) savedOther |= ss.sys[o].type == ot;
+                if (!savedOther) other = ship_find_system(s, ot);
+            }
+            if (def && other >= 0) {
+                gpu_idle();
+                si = ship_replace_system(s, dat, other, def);
+            } else if (def) {
+                si = ship_install_system(s, dat, def);
+            }
         }
         if (si < 0) continue;
         ((SystemDef*)s->systems[si].def)->level = ss.sys[k].level;
@@ -4589,7 +4602,7 @@ static void strand_boarders(const Ship* ship, CrewSet* crew, CrewSet* away) {
         bool ours = m->foreign != (m->mind > 0.0f);  // in the enemy's list: owned by us
         if (!ours) continue;
         if (!m->drone && cb >= 0 && (ship_system_capacity(ship, cb) > 0 || ship->aug[AUG_BACKUP_DNA]) && crew->cloneCount < MAX_CREW) {
-            int ri = crew_race(crew, away->races[m->race].name);
+            int ri = crew_race_look(crew, away->races[m->race].name, away->races[m->race].look);
             if (ri >= 0) {
                 crew->cloneQueue[crew->cloneCount].race = ri;
                 crew->cloneQueue[crew->cloneCount].female = m->female;
@@ -5834,7 +5847,8 @@ int main(void) {
                 int cb = ship_find_system(ship, SYS_CLONEBAY);
                 for (int k = 0; k < nd; k++) {
                     if (cb < 0 || (ship_system_capacity(ship, cb) <= 0 && !ship->aug[AUG_BACKUP_DNA]) || crew->cloneCount >= MAX_CREW) break;
-                    int ri = crew_race(crew, dead[k].race);
+                    bool woman = dead[k].female && !strcmp(dead[k].race, "human");
+                    int ri = crew_race_look(crew, dead[k].race, woman ? "female" : dead[k].race);
                     if (ri < 0) continue;
                     crew->cloneQueue[crew->cloneCount].race = ri;
                     crew->cloneQueue[crew->cloneCount].female = dead[k].female;

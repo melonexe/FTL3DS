@@ -158,6 +158,7 @@ void profile_add_scrap(int n) {
 void profile_add_ship_kill(void) {
     sKills++;
     if (sKills >= 1000) profile_award("ACH_SHIPS", DIFF_NORMAL);
+    profile_save();  // once a fight: keeps the kill and scrap totals if the game isn't closed cleanly
 }
 
 const char* profile_unlock_hint(int f, int layout) {

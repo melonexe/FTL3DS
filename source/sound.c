@@ -42,6 +42,7 @@ typedef struct {
     volatile bool ready, failed, queued, playPending;
     bool linear;  // pcm moved to linear memory (the DSP reads it from there); main thread only
     bool priority;  // must not go missing (ship explosions): preloaded first, never cut off
+    u64 pendingAt;  // when playPending was set (ms): a play left waiting too long is dropped
 } Sfx;
 
 typedef struct {
@@ -218,6 +219,7 @@ static void loader_thread(void* arg) {
                 __sync_synchronize();
                 s->ready = true;
             }
+            if (!s->ready) s->playPending = false;  // couldn't decode it now: that play is dropped
             s->queued = false;
             continue;
         }
@@ -574,7 +576,8 @@ void sound_update(float dt) {
     for (int i = 0; i < sSfxCount; i++)
         if (sSfx[i].playPending && (sSfx[i].ready || sSfx[i].failed)) {
             sSfx[i].playPending = false;
-            if (sSfx[i].ready) sound_play(sSfx[i].name);
+            // Decoded in time to still go with what it's for (a hit, a door): play it, else drop it.
+            if (sSfx[i].ready && osGetTime() - sSfx[i].pendingAt < 1500) sound_play(sSfx[i].name);
         }
     if (sPendingTime < 0.0f) return;
     sPendingTime += dt;
@@ -728,6 +731,7 @@ void sound_play(const char* name) {
     if (!s) return;
     if (!s->ready) {  // decoded in the background; it plays as soon as it's ready
         sfx_request(s);
+        if (!s->playPending) s->pendingAt = osGetTime();
         s->playPending = true;
         return;
     }

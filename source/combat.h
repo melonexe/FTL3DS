@@ -23,6 +23,7 @@ typedef struct {
     float t, duration;
     float speed;       // game units, for drawing at the real speed
     bool miss;
+    signed char evade;  // the target's evasion (%) when `miss` was rolled; -1 if it never was
     bool outside;      // flak that lands outside every room
     int drone;         // firing drone's slot, or -1 for a ship weapon (then `weapon` is used)
     bool inTarget;     // fired from inside the target's space (drones): sx/sy are target coordinates

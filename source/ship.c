@@ -671,6 +671,12 @@ int ship_replace_system(Ship* s, FtlDat* dat, int idx, const SystemDef* src) {
     s->systemCount = idx;
     int got = ship_install_system(s, dat, &def);
     s->systemCount = count;
+    // It powered up seeing only the systems before it: take that power again against them all.
+    if (got >= 0 && !system_is_subsystem(def.type) && def.type != SYS_WEAPONS && def.type != SYS_DRONES) {
+        int want = s->systems[got].power;
+        s->systems[got].power = 0;
+        ship_set_power(s, got, want);
+    }
     return got;
 }
 

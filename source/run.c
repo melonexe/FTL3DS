@@ -258,7 +258,7 @@ static int gen_scrap(int tier, int sector) {
 typedef struct {
     int scrap, fuel, missiles, parts, hull, crew;
     char item[64];
-    char note[96];  // e.g. a quest marker was added
+    char note[320];  // e.g. a quest marker was added, or a clone bay saved someone
 } Gains;
 
 // One of fuel / missiles / drone parts (0/1/2) at a tier.
@@ -837,12 +837,30 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
                 }
             }
         } else if (!strcmp(n->name, "removeCrew")) {
-            for (int i = ctx->crew->count - 1; i >= 0; i--)
-                if (!ctx->crew->crew[i].foreign && !ctx->crew->crew[i].drone && crew_native_count(ctx->crew) > 1) {
-                    crew_remove(ctx->crew, i);
+            // A random crew member is lost (never the last). With <clone>true</clone> a clone bay
+            // brings them back, and the event's own text inside says so.
+            CrewSet* cs = ctx->crew;
+            int native[MAX_CREW], cnt = 0;
+            for (int i = 0; i < cs->count; i++)
+                if (!cs->crew[i].foreign && !cs->crew[i].drone) native[cnt++] = i;
+            if (cnt > 1) {
+                int i = native[rand() % cnt];
+                const XNode* cl = xchild(n, "clone");
+                bool clone = cl && !strcmp(cl->text, "true") && ship_find_system(s, SYS_CLONEBAY) >= 0 && cs->cloneCount < MAX_CREW;
+                if (clone) {
+                    const Crew* m = &cs->crew[i];
+                    cs->cloneQueue[cs->cloneCount].race = m->race;
+                    cs->cloneQueue[cs->cloneCount].female = m->female;
+                    memcpy(cs->cloneQueue[cs->cloneCount].name, m->name, sizeof(cs->cloneQueue[0].name));
+                    memcpy(cs->cloneQueue[cs->cloneCount].xp, m->xp, sizeof(m->xp));
+                    cs->cloneCount++;
+                    const char* ct = resolve_text(xchild(n, "text"));
+                    if (ct[0]) snprintf(g.note, sizeof(g.note), "%s", ct);
+                } else {
                     g.crew--;
-                    break;
                 }
+                crew_remove(cs, i);
+            }
         } else if (!strcmp(n->name, "ship")) {
             // A ship appears (load=...) and may turn hostile later in the event.
             if (xattr(n, "load")) sShipDef = find_named(sShips, sShipCount, xattr(n, "load"));
@@ -887,7 +905,8 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
                 run->planetY = 203.0f / 720.0f;
             }
         } else if (!strcmp(n->name, "modifyPursuit")) {
-            run->fleetX -= xattr_int(n, "amount", 0) * 64.0f;
+            // Positive: the fleet gains a jump on us (a warning ship got away); negative: delayed.
+            run->fleetX += xattr_int(n, "amount", 0) * 64.0f;
         } else if (!strcmp(n->name, "reveal_map")) {
             run->revealed = true;
         } else if (!strcmp(n->name, "weapon") || !strcmp(n->name, "drone") || !strcmp(n->name, "augment")) {
@@ -967,8 +986,8 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
         append(v->text, sizeof(v->text), line);
     }
     if (g.note[0]) {
-        snprintf(line, sizeof(line), "\n\n%s", g.note);
-        append(v->text, sizeof(v->text), line);
+        append(v->text, sizeof(v->text), "\n\n");
+        append(v->text, sizeof(v->text), g.note);
     }
     if (v->store) stock_store(run, s);
 

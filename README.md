@@ -7,6 +7,13 @@ This repository contains **no FTL code or assets**. The game loads `ftl.dat` fro
 (1.6 or later) at runtime. The engine is written from the community-documented data formats and
 reverse-engineering notes, without decompiling the original game.
 
+## Before you start: set up your 3DS
+
+This is homebrew, so your 3DS needs custom firmware. Follow **[3ds.hacks.guide](https://3ds.hacks.guide/)**
+from start to finish: it installs everything this game relies on (FBI to install CIAs, the Homebrew
+Launcher, and the sound firmware homebrew needs). If your console is already set up that way,
+you're ready.
+
 ## Installing
 
 You need your own copy of FTL: Faster Than Light, version 1.6 or later (Steam, GOG, Humble...).
@@ -23,8 +30,8 @@ inside. Install that CIA on the 3DS with FBI. It contains your copy of FTL's dat
 2. Install the release's `ftl3ds.cia` with FBI, or copy `ftl3ds.3dsx` to `sdmc:/3ds/` and start it
    from the Homebrew Launcher.
 
-For sound the SD card needs `sdmc:/3ds/dspfirm.cdc`; run [DSP1](https://github.com/zoogie/DSP1)
-once to dump it if you don't have it (without it the game runs silently and says so).
+If the game says "No sound", your console's setup is missing a step: see
+[3ds.hacks.guide](https://3ds.hacks.guide/).
 
 The game reads `romfs:/ftl.dat` first, then `sdmc:/3ds/ftl3ds/ftl.dat`, then `sdmc:/ftl.dat`.
 Saves, settings and profile progress live in `sdmc:/3ds/ftl3ds/`.

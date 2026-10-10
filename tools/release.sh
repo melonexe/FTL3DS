@@ -37,7 +37,8 @@ OR, by hand:
 3. Install ftl3ds.cia with FBI (or another CIA installer), or copy ftl3ds.3dsx to sdmc:/3ds/ and
    start it from the Homebrew Launcher.
 
-For sound the SD card needs sdmc:/3ds/dspfirm.cdc (run DSP1 once if you don't have it).
+Your 3DS needs custom firmware: set it up with https://3ds.hacks.guide/ first. That guide also
+installs FBI and the sound firmware homebrew needs (if the game says "No sound", see the guide).
 
 Saves and progress are kept in sdmc:/3ds/ftl3ds/.
 EOF

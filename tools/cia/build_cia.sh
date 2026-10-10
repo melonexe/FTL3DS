@@ -13,7 +13,11 @@
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
-DAT=${1:-"F:/SteamLibrary/steamapps/common/FTL Faster Than Light/ftl.dat"}
+DAT=$1
+if [ "$PUBLIC" != 1 ] && [ ! -f "$DAT" ]; then
+    echo "usage: tools/cia/build_cia.sh <path to your ftl.dat>   (or PUBLIC=1 for a shareable CIA)" >&2
+    exit 1
+fi
 EXE="$(dirname "$DAT")/FTLGame.exe"
 cd "$HERE"
 BT=./bt/windows-x86_64/bannertool.exe
@@ -61,7 +65,7 @@ elif [ -f "$EXE" ] && BANNER_ICON_ONLY=1 python make_banner3d.py romfs/ftl.dat "
 fi
 
 $BT makebanner $BANNER -o banner.bnr
-$BT makesmdh -s "FTL 3DS" -l "FTL: Faster Than Light (engine port, test build)" -p "Subset Games / FTL-port" \
+$BT makesmdh -s "FTL3DS" -l "FTL: Faster Than Light (engine port, test build)" -p "FTL3DS contributors" \
     -f "$SMDH_FLAGS" -i "$ICON" -o icon.smdh
 
 ./makerom.exe -f cia -o "$OUT" -elf "$ROOT/ftl3ds.elf" -rsf ftl3ds.rsf \

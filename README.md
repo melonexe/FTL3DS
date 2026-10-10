@@ -1,11 +1,23 @@
-# FTL 3DS
+# FTL3DS
 
 A from-scratch reimplementation of the FTL: Faster Than Light engine for Nintendo 3DS homebrew:
 full runs from the hangar to the rebel flagship, on the 3DS's two screens.
 
-This repository contains **no FTL code or assets**. The game loads `ftl.dat` from your own copy of FTL
-(1.6 or later) at runtime. The engine is written from the community-documented data formats and
-reverse-engineering notes, without decompiling the original game.
+An unofficial fan project, not affiliated with or endorsed by Subset Games. FTL: Faster Than Light
+is theirs; buy it if you haven't. This repository contains **no FTL code or assets**: the game loads
+`ftl.dat` from your own copy of FTL (1.6 or later) at runtime. The engine is written from the
+community-documented data formats and reverse-engineering notes, without decompiling the original
+game.
+
+## Work in progress
+
+This is an unofficial fan project and still a work in progress: expect bugs, rough edges and the
+odd crash, and don't expect it to match FTL perfectly yet (see [What's missing](#whats-missing)).
+Back up your SD card's `3ds/ftl3ds/` folder if you care about your saves.
+
+**Contributions are welcome:** bug reports (what happened, which ship and sector, a photo helps),
+fixes, and work on anything in the missing list. If you open a pull request, never include
+`ftl.dat` or anything extracted from it.
 
 ## Before you start: set up your 3DS
 
@@ -85,8 +97,6 @@ the top-left buttons are SHIP and JUMP.
 | X | Next tab |
 | Y / B | Select the next crew member / deselect |
 | START | Pause menu |
-| SELECT | Debug menu (any ship and enemy, quick actions) |
-| L + R + Y / L + R + B | Debug: fire and breach on your ship / destroy the enemy |
 
 ## Building
 
@@ -118,7 +128,8 @@ from FTL's files out of the repository.
 ## Scenario tests
 
 Testing has its own build, so the game you play never contains test code (and never reads a
-`test.txt`):
+`test.txt`). The test build also has debug controls: SELECT opens a debug menu (any ship and enemy,
+quick actions), L + R + Y starts a fire and breach on your ship, L + R + B destroys the enemy.
 
 ```
 make TEST=1                                          # builds ftl3ds_test.3dsx in build_test/
@@ -176,3 +187,11 @@ their own profile (`profile_test.txt`, everything unlocked).
 | `source/feats.h`, `source/env.h` | Achievement bookkeeping; hazards and difficulty |
 | `test/` | The test build's scenario runner (`make TEST=1` only) |
 | `tools/` | CIA and release scripts, FTL2CIA, scenario runner, PC tools |
+
+## Licences
+
+FTL3DS's code is under the [MIT licence](LICENSE). FTL: Faster Than Light and its data belong to
+Subset Games and aren't covered by it.
+
+FTL2CIA bundles makerom, bannertool, pefile, Pillow and the Python runtime; their notices are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (and in every release zip).

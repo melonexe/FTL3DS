@@ -1,5 +1,5 @@
 #---------------------------------------------------------------------------------
-# FTL 3DS - based on the devkitPro 3DS template.
+# FTL3DS - based on the devkitPro 3DS template.
 # Requires devkitPro with the 3ds-dev group plus: pacman -S 3ds-zlib 3ds-libpng 3ds-libvorbisidec
 #---------------------------------------------------------------------------------
 .SUFFIXES:
@@ -16,9 +16,9 @@ BUILD           := build
 SOURCES         := source
 INCLUDES        := source
 
-APP_TITLE       := FTL 3DS
+APP_TITLE       := FTL3DS
 APP_DESCRIPTION := FTL engine reimplementation (needs your own ftl.dat)
-APP_AUTHOR      := FTL-port
+APP_AUTHOR      := FTL3DS contributors
 
 #---------------------------------------------------------------------------------
 ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
@@ -35,7 +35,7 @@ TARGET   := ftl3ds_test
 BUILD    := build_test
 SOURCES  := source test
 INCLUDES := source test
-APP_TITLE := FTL 3DS (test)
+APP_TITLE := FTL3DS (test)
 CFLAGS   += -DFTL_TEST
 endif
 

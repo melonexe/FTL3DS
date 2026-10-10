@@ -5539,13 +5539,15 @@ int main(void) {
         Ship* foe = ENEMY_SHIP;
         CrewSet* foeCrew = ENEMY_CREW;
 
+        if (down & KEY_X) {
+            tab = (tab + 1) % TAB_COUNT;
+            sound_play("hoverBeep");
+        }
+#ifdef FTL_TEST
+        // Debug controls, in the test build only: SELECT opens the debug menu.
         if (down & KEY_SELECT) {
             debugOpen = !debugOpen;
             dbgShip = index;
-            sound_play("hoverBeep");
-        }
-        if (down & KEY_X) {
-            tab = (tab + 1) % TAB_COUNT;
             sound_play("hoverBeep");
         }
         // Debug: L+R+B destroys the enemy ship.
@@ -5559,6 +5561,7 @@ int main(void) {
             life_breach(ship, rand() % ship->roomCount);
             down &= ~KEY_Y;
         }
+#endif
         if ((down & KEY_Y) && crew_native_count(crew) > 0) {
             int first = -1;  // select the next of our crew after the first selected one
             for (int i = 0; i < crew->count && first < 0; i++)

@@ -75,7 +75,7 @@ def main():
     write_png(os.path.join(HERE, "icon.png"), 48, 48, icon)
     banner = canvas(256, 128, 2)
     ship(banner, 256, 150, 84, 3)
-    text(banner, 256, "FTL 3DS", 28, 18, 5, (255, 215, 90, 255))
+    text(banner, 256, "FTL3DS", 28, 18, 5, (255, 215, 90, 255))
     write_png(os.path.join(HERE, "banner.png"), 256, 128, banner)
     with wave.open(os.path.join(HERE, "banner.wav"), 'wb') as wv:
         wv.setnchannels(1)

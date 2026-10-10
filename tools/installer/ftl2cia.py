@@ -112,8 +112,8 @@ def build_cia(dat_path, out_path, log):
             shutil.copyfile(os.path.join(pay, "icon.png"), icon)
         smdh = os.path.join(work, "icon.smdh")
         log("Making the home menu icon...")
-        run([bannertool, "makesmdh", "-s", "FTL 3DS", "-l", "FTL: Faster Than Light (FTL 3DS engine)",
-             "-p", "FTL-port", "-f", "visible,allow3d,recordusage", "-i", icon, "-o", smdh], log)
+        run([bannertool, "makesmdh", "-s", "FTL3DS", "-l", "FTL: Faster Than Light (FTL3DS engine)",
+             "-p", "FTL3DS contributors", "-f", "visible,allow3d,recordusage", "-i", icon, "-o", smdh], log)
         log("Building the CIA (this takes a minute)...")
         run([makerom, "-f", "cia", "-o", out_path, "-elf", os.path.join(pay, "ftl3ds.elf"),
              "-rsf", os.path.join(pay, "ftl3ds.rsf"), "-icon", smdh, "-banner", os.path.join(pay, "banner.bnr"),

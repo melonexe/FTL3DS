@@ -19,10 +19,10 @@ sh tools/installer/build_installer.sh  # dist/FTL2CIA.exe
 OUT="dist/ftl3ds-$VERSION"
 rm -rf "$OUT" "$OUT.zip"
 mkdir -p "$OUT"
-cp ftl3ds.3dsx ftl3ds_public.cia dist/FTL2CIA.exe "$OUT/"
+cp ftl3ds.3dsx ftl3ds_public.cia dist/FTL2CIA.exe THIRD_PARTY_NOTICES.md LICENSE "$OUT/"
 mv "$OUT/ftl3ds_public.cia" "$OUT/ftl3ds.cia"
 cat > "$OUT/INSTALL.txt" <<EOF
-FTL 3DS $VERSION - an engine for FTL: Faster Than Light on the Nintendo 3DS.
+FTL3DS $VERSION - an engine for FTL: Faster Than Light on the Nintendo 3DS.
 
 This contains no part of FTL. You need your own copy of FTL: Faster Than Light (version 1.6 or
 later, e.g. Steam, GOG or Humble) for its data file, ftl.dat.

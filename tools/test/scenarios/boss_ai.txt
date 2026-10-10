@@ -1,0 +1,17 @@
+# The flagship with its crew dead: the AI flies it (evasion as if manned) and repairs its systems;
+# its guns are drawn on their mounts.
+boss 1
+ship 1
+enemyfire 0
+seed 4
+at 1 shot guns
+at 2 do killcrew
+at 4 expect enemycrew == 0
+at 4 expect enemyevasion > 0
+at 4 do enemydamage
+at 4.5 log state
+at 5 expect enemydamage > 5
+at 30 log state
+at 30 expect enemydamage == 0
+at 30 shot repaired
+at 31 done

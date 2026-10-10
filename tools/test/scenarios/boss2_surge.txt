@@ -1,0 +1,13 @@
+# Flagship stage 2: drones, and a power surge of six extra drones.
+boss 2
+ship 1
+tab crew
+seed 4
+at 1 expect bossstage == 2
+at 1 expect artillery == 3
+at 1 expect enemyhull == 22
+at 2 do surge
+at 3 shot surge_drones
+at 3 log state
+at 9 shot after_surge
+at 10 done

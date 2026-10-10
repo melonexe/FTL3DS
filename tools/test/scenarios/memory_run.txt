@@ -1,0 +1,38 @@
+# Memory over a run: eight jumps; decoded sounds are let go at each jump, so memory stays level.
+ship 1
+seed 8
+at 1 do closeevents
+at 2 do jump near
+at 7 do closeevents
+at 7.5 do closeevents
+at 8 log state
+at 10 do jump near
+at 15 do closeevents
+at 15.5 do closeevents
+at 16 log state
+at 18 do jump near
+at 23 do closeevents
+at 23.5 do closeevents
+at 24 log state
+at 26 do jump near
+at 31 do closeevents
+at 31.5 do closeevents
+at 32 log state
+at 34 do jump near
+at 39 do closeevents
+at 39.5 do closeevents
+at 40 log state
+at 42 do jump near
+at 47 do closeevents
+at 47.5 do closeevents
+at 48 log state
+at 50 do jump near
+at 55 do closeevents
+at 55.5 do closeevents
+at 56 log state
+at 58 do jump near
+at 63 do closeevents
+at 63.5 do closeevents
+at 64 log state
+at 66 expect linearfree > 8
+at 66 done

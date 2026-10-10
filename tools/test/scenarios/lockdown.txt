@@ -1,0 +1,15 @@
+# Crystal lockdown: the ability coats a room for 12 s, then recharges.
+ship PLAYER_SHIP_CRYSTAL
+enemy REBEL_FAT
+enemyfire 0
+seed 2
+at 1 do select 1
+at 1.5 do lockdown
+at 2 expect lockdowns == 1
+at 2.1 log state
+at 2.2 log state
+at 2.3 log state
+at 2.5 shot locked
+at 3 log state
+at 16 expect lockdowns == 0
+at 16 done

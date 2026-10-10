@@ -1,0 +1,20 @@
+# Ship augments in a one-off fight: Fire Suppression and Slug Repair Gel clear fires and breaches
+# with nobody in the rooms (fires re-spread faster than its Crystal-speed suppression, as in FTL: it only keeps them from growing), Zoltan bypass etc. are fitted and counted.
+ship 1
+enemy REBEL_FAT
+enemyfire 0
+seed 5
+at 1 do aug FIRE_EXTINGUISHERS
+at 1 do aug SLUG_GEL
+at 1 do aug CREW_STIMS
+at 2 expect aug_FIRE_EXTINGUISHERS == 1
+at 2 expect aug_SLUG_GEL == 1
+at 2 do fire 3
+at 2 do breach 3
+at 2.5 expect fires > 0
+at 2.5 expect breaches > 0
+at 3 shot burning
+at 30 expect fires <= 3
+at 30 expect breaches == 0
+at 30 shot after
+at 31 done

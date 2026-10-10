@@ -1,0 +1,15 @@
+# Crew skills: one point short of level 1; the first dodges level pilot and engines.
+ship 1
+enemy REBEL_FAT
+skills 0
+tab crew
+seed 9
+at 1 expect skill_pilot == 0
+at 1 expect evasion == 20
+at 1 do select 1
+at 2 shot skills_panel
+at 30 log state
+at 30 expect skill_pilot >= 1
+at 30 expect skill_engines >= 1
+at 30 shot after
+at 31 done

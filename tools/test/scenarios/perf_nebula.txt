@@ -1,0 +1,16 @@
+# Frame rate with nebula clouds (fps, and the last frame's cpums / gpums): open space first, then
+# a nebula, then the beacon map open over it. No screenshots (they hold the game still).
+ship 1
+seed 5
+at 1 do closeevents
+at 4 log state
+at 4.5 do env nebula
+at 7 log state
+at 8 log state
+at 9 log state
+at 9.5 do map
+at 11 log state
+at 12 log state
+at 13 log state
+at 14 log state
+at 15 done

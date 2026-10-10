@@ -1,0 +1,19 @@
+# Map augments in a run: Long-Ranged Scanners label neighbouring beacons; Adv. FTL Navigation
+# lets us jump back to beacons already visited.
+ship 1
+seed 3
+at 1 do closeevents
+at 1.5 do aug ADV_SCANNERS
+at 1.5 do aug FTL_JUMPER
+at 2 expect aug_ADV_SCANNERS == 1
+at 2 do map
+at 3 shot scanners
+at 4 do jump near
+at 8 do closeevents
+at 9 do jump near
+at 13 do closeevents
+at 14 log state
+at 14 expect jumpfar >= 1
+at 14 do map
+at 15 shot jumper
+at 16 done

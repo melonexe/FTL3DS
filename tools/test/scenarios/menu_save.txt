@@ -1,0 +1,15 @@
+# Main menu, hangar and saving: start a run, reach peace, check a save exists.
+title 1
+seed 4
+at 1 expect menu == 1
+at 1 shot main_menu
+at 2 do tap 160 60
+at 3 expect menu == 2
+at 3 shot hangar
+at 4 do key Y
+at 5 do key A
+at 7 expect menu == 0
+at 7 do closeevents
+at 9 expect saved == 1
+at 9 log state
+at 10 done

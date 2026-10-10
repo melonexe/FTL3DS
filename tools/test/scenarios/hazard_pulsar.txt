@@ -1,0 +1,13 @@
+# Hazard: pulsar, in a one-off fight with the enemy holding fire.
+ship 1
+enemy REBEL_FAT
+enemyfire 0
+env pulsar
+tab crew
+seed 7
+at 1 expect env > 0
+at 2 shot start
+at 2 log state
+at 35 shot later
+at 35 log state
+at 36 done

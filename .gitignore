@@ -1,0 +1,25 @@
+build/
+*.3dsx
+*.elf
+*.smdh
+*.map
+__pycache__/
+
+# Game data belongs to Subset Games - never commit it.
+ftl.dat
+*.dat
+
+# CIA test builds carry the player's own ftl.dat
+tools/cia/romfs/
+tools/cia/*.exe
+tools/cia/bt/
+tools/cia/*.zip
+tools/cia/*.bnr
+tools/cia/*.smdh
+*.cia
+# 3D banner: built from the player's own FTL files, plus the downloaded converter
+tools/cia/pycgfx/
+tools/cia/banner3d/
+banner_tests/
+build_test/
+ftl3ds_test.*

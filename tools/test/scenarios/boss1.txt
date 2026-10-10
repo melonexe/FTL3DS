@@ -1,0 +1,17 @@
+# Flagship stage 1: four weapon rooms, 11 crew, then destroyed.
+boss 1
+ship 1
+tab fight
+seed 3
+at 1 expect bossstage == 1
+at 1 expect artillery == 4
+at 1 expect enemycrew == 11
+at 1 expect enemyhull == 20
+at 2 log state
+at 2 shot start
+at 12 shot fighting
+at 12 log state
+at 13 do destroy
+at 15 expect result == 1
+at 15 shot destroyed
+at 16 done

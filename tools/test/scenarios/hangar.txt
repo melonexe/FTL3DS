@@ -1,0 +1,17 @@
+# Main menu to hangar: change family, type and difficulty, then start a run with the choice.
+title 1
+seed 2
+at 1 shot title
+at 2 do tap 160 60
+at 3 expect menu == 2
+at 3 do key RIGHT
+at 4 do key RIGHT
+at 5 do key X
+at 6 do tap 250 170
+at 7 shot hangar_choice
+at 8 do tap 240 214
+at 10 expect menu == 0
+at 10 expect run == 1
+at 10 expect sector == 1
+at 11 shot run_started
+at 12 done

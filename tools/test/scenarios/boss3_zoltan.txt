@@ -1,0 +1,13 @@
+# Flagship stage 3: a 12-point Zoltan shield; three laser surges, the fourth restores the shield.
+boss 3
+ship 1
+tab crew
+seed 5
+at 1 expect bossstage == 3
+at 1 expect enemyzoltan == 12
+at 1 expect artillery == 2
+at 2 shot start
+at 2 do surge
+at 3 shot laser_surge
+at 6 log state
+at 7 done

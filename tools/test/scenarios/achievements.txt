@@ -1,0 +1,22 @@
+# Achievements: four sector jumps reach sector 5 and earn Just Getting Started, plus the run's
+# "without" ones (no shots, no store repairs, no upgrades); the popup shows on the top screen.
+ship 1
+seed 3
+at 1 do closeevents
+at 1.5 expect ach_ACH_SECTOR_5 == 0
+at 2 do nextsector
+at 6 do closeevents
+at 7 do nextsector
+at 11 do closeevents
+at 12 do nextsector
+at 16 do closeevents
+at 17 do nextsector
+at 20 do closeevents
+at 20.5 shot popup
+at 21 log state
+at 21 expect sector == 5
+at 21 expect ach_ACH_SECTOR_5 >= 1
+at 21 expect ach_ACH_PACIFIST >= 1
+at 21 expect ach_ACH_NO_REPAIR >= 1
+at 21 expect ach_ACH_NO_UPGRADES >= 1
+at 22 done

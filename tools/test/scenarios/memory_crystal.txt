@@ -1,0 +1,9 @@
+# Memory with the biggest player ship: linear memory must keep headroom.
+ship PLAYER_SHIP_CRYSTAL
+enemy REBEL_FAT
+memory 1
+seed 3
+at 2 log state
+at 2 expect linearfree > 8
+at 2 shot memory
+at 3 done

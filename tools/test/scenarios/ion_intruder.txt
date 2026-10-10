@@ -1,0 +1,12 @@
+# Ion intruder drone: boards the enemy and ionises the system it lands by.
+ship PLAYER_SHIP_CIRCLE
+enemy REBEL_FAT
+enemyfire 0
+seed 7
+tab crew
+at 1 do drone BOARDER_ION
+at 6 shot boarded
+at 22 log state
+at 22 expect enemyion >= 1
+at 22 shot ionised
+at 23 done

@@ -1,0 +1,9 @@
+# Nebula beacons show as clouds on the beacon map (a nebula sector has plenty).
+ship 1
+seed 5
+at 1 do closeevents
+at 1.5 do env nebula
+at 2 shot nebula_sky
+at 3 do map
+at 4 shot map
+at 5 done

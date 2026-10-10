@@ -1,0 +1,8 @@
+# The SYS tab between fights on a ship with a teleporter (it used to read the absent enemy's crew).
+ship PLAYER_SHIP_MANTIS
+seed 2
+tab sys
+at 1 do closeevents
+at 2 shot sys_tab
+at 3 expect run == 1
+at 3 done

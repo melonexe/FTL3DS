@@ -1,0 +1,10 @@
+# The main menu's STATS opens the achievements list; DOWN moves the selection; B goes back.
+title 1
+seed 1
+at 1 do tap 160 118
+at 2 expect menu == 5
+at 2.5 do key DOWN
+at 3 shot achievements
+at 7 do key B
+at 8 expect menu == 1
+at 8 done

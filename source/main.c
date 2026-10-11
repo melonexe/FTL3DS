@@ -819,6 +819,7 @@ static int sSectorPick = -1, sNextRow;
 // at the new beacon. Timings are our choice (no source gives FTL's).
 #define JUMP_OUT 0.7f
 #define JUMP_IN 0.5f
+#define JUMP_FLASH 0.15f  // the white flash: this long fading in, then the same fading out
 static float sJumpTime = -1.0f;  // seconds into the jump, or < 0
 // The FTL drive's charge (0..1) during a fight; outside fights it's ready at once. Seconds to
 // charge by engine power: unmanned, then manned by engines skill 0/1/2 (wiki: Engines, "FTL Drive
@@ -2165,6 +2166,40 @@ static int find_blueprint(const ShipBlueprint* bps, int count, const char* name)
     return -1;
 }
 
+// The enemy for an event's auto_blueprint, in sector `sector` (0-based). A list (lists can name
+// lists) gives one of its ships allowed this far in by their <minSector> (bigger ships only turn up
+// later); with the Advanced Edition a ship comes as its *_DLC variant (clone bay and AE layouts) half
+// the time: that split is our assumption, no source we have gives it.
+static int pick_enemy(const ShipBlueprint* bps, int count, const char* name, int sector) {
+    if (!name || !name[0]) return -1;
+    const char* stack[64];
+    const char* ships[64];
+    int ns = 0, nships = 0;
+    stack[ns++] = name;
+    for (int guard = 0; ns > 0 && guard < 256; guard++) {
+        const char* x = stack[--ns];
+        const char* items[48];
+        int k = weapon_list(x, items, 48);  // blueprint lists of any kind
+        if (!k && nships < 64) ships[nships++] = x;
+        for (int i = 0; i < k && ns < 64; i++) stack[ns++] = items[i];
+    }
+    int allowed[64], known[64], na = 0, nk = 0;
+    for (int i = 0; i < nships; i++) {
+        int b = find_blueprint(bps, count, ships[i]);
+        if (b < 0) continue;
+        known[nk++] = b;
+        if (bps[b].minSector <= sector + 1) allowed[na++] = b;
+    }
+    int pick = na ? allowed[rand() % na] : nk ? known[rand() % nk] : -1;
+    if (pick >= 0 && rand() % 2) {
+        char dlc[64];
+        snprintf(dlc, sizeof(dlc), "%s_DLC", bps[pick].name);
+        int b = find_blueprint(bps, count, dlc);
+        if (b >= 0) pick = b;
+    }
+    return pick;
+}
+
 // ---- Debug menu (SELECT) -------------------------------------------------------------
 
 enum {
@@ -2364,11 +2399,20 @@ static bool image_job_poll(ImageJob* j) {
 
 static bool sBackdropLoading;
 
+#define BACKDROP_FADE 0.4f  // seconds for a newly loaded backdrop or planet to fade in (our choice)
+static float sBgShownAt = -100.0f, sPlanetShownAt = -100.0f;  // sClock when each was swapped in
+
 static void backdrop_sync(const Run* r) {
     image_job_want(&sBgJob, &sBgTex, sBgName, r->bg, TOP_W, TOP_H);
     int px = r->planetSize * TOP_W / 1280;
     image_job_want(&sPlanetJob, &sPlanetTex, sPlanetName, r->planet, px, px);
+    bool bgWas = sBgTex.loaded, planetWas = sPlanetTex.loaded;
+    const void* bgImg = sBgTex.image.tex;
+    const void* planetImg = sPlanetTex.image.tex;
     bool a = image_job_poll(&sBgJob), b = image_job_poll(&sPlanetJob);
+    // Swapped in this frame: fade it in (the jump no longer waits for it).
+    if (sBgTex.loaded && (!bgWas || sBgTex.image.tex != bgImg)) sBgShownAt = sClock;
+    if (sPlanetTex.loaded && (!planetWas || sPlanetTex.image.tex != planetImg)) sPlanetShownAt = sClock;
     sBackdropLoading = a || b || strcmp(sBgName, r->bg) || strcmp(sPlanetName, r->planet);
 }
 
@@ -2382,8 +2426,8 @@ static void draw_jump_fx(void) {
         float x = TOP_W - fmodf(sClock * speed + i * 71.0f, TOP_W + 200.0f);
         C2D_DrawRectSolid(x, y, 0, len, 1, C2D_Color32(220, 235, 255, (u8)(170 * strength)));
     }
-    float flash = sJumpTime < JUMP_OUT ? (sJumpTime - JUMP_OUT * 0.7f) / (JUMP_OUT * 0.3f)
-                                       : 1.0f - (sJumpTime - JUMP_OUT) / (JUMP_IN * 0.5f);
+    float flash = sJumpTime < JUMP_OUT ? (sJumpTime - (JUMP_OUT - JUMP_FLASH)) / JUMP_FLASH
+                                       : 1.0f - (sJumpTime - JUMP_OUT) / JUMP_FLASH;
     if (flash > 0.0f) C2D_DrawRectSolid(0, 0, 0, TOP_W, TOP_H, C2D_Color32(255, 255, 255, (u8)((flash > 1 ? 1 : flash) * 255)));
 }
 
@@ -2623,11 +2667,17 @@ static void draw_backdrop(const Run* r, float x, float y, float w, float h, floa
     if (sBgTex.loaded) {
         float s = w / sBgTex.width > h / sBgTex.height ? w / sBgTex.width : h / sBgTex.height;
         float bw = sBgTex.width * s, bh = sBgTex.height * s;
-        C2D_DrawImageAt(sBgTex.image, x + (w - bw) * 0.5f, y + (h - bh) * 0.5f, 0.0f, NULL, s, s);
+        float k = (sClock - sBgShownAt) / BACKDROP_FADE;
+        C2D_ImageTint fade;
+        C2D_AlphaImageTint(&fade, k < 1.0f ? (k > 0.0f ? k : 0.0f) : 1.0f);
+        C2D_DrawImageAt(sBgTex.image, x + (w - bw) * 0.5f, y + (h - bh) * 0.5f, 0.0f, k < 1.0f ? &fade : NULL, s, s);
     }
-    if (sPlanetTex.loaded) {
+    // The old planet would sit at the new beacon's spot while the new one loads: none until then.
+    if (sPlanetTex.loaded && !strcmp(sPlanetName, r->planet)) {
         float size = r->planetSize * w / 1280.0f;
-        draw_tex(&sPlanetTex, x + r->planetX * w - size * 0.5f, y + r->planetY * h - size * 0.5f, size, size, 1.0f);
+        float k = (sClock - sPlanetShownAt) / BACKDROP_FADE;
+        draw_tex(&sPlanetTex, x + r->planetX * w - size * 0.5f, y + r->planetY * h - size * 0.5f, size, size,
+                 k < 1.0f ? (k > 0.0f ? k : 0.0f) : 1.0f);
     }
     if (sRockLoaded) draw_rock_layers(x, y, w, h);
     if (dim <= 0.5f) draw_clouds(x, y, w, h);  // behind the map, events and the store they barely show: skip the cost
@@ -3738,6 +3788,9 @@ static const void* sPreloadFor;  // the event's ship definition it was built for
 // A ship that's here but not fighting (as in FTL): an event's ship while its dialog is up, one that
 // surrendered or made peace, or one whose crew we killed. Drawn in the enemy panel until we jump.
 static bool sVisitor;
+// How long the jump's beacon change (one frame, under the white flash) and the arriving ship's
+// load took, in ms: test builds report them (jumpms, shiploadms) for tuning the jump.
+static unsigned sJumpChangeMs, sShipLoadMs;
 
 static int sAchFam = -1, sAchLayout;  // the run's ship family and layout
 static bool sAchWasWon, sAchWasCloaked, sAchShieldBroken;
@@ -4351,7 +4404,9 @@ static void draw_hangar(const ShipBlueprint* bps) {
     if (locked) {
         int layout, fam = profile_family_of(bps[bi].name, &layout);
         draw_text_centred(0, HG_MINI_Y + 36, BOT_W, 0.55f, C2D_Color32(255, 120, 100, 255), "LOCKED");
-        draw_text_centred(0, HG_DIFF_Y - 18, BOT_W, 0.4f, C2D_Color32(255, 200, 120, 255), profile_unlock_hint(fam, layout));
+        // How to unlock it: under the arrows, over the silhouette (the rows below are all buttons).
+        C2D_DrawRectSolid(0, HG_MINI_Y + 66, 0, BOT_W, 18, C2D_Color32(10, 13, 24, 210));
+        draw_text_centred(4, HG_MINI_Y + 68, BOT_W - 8, 0.4f, C2D_Color32(255, 200, 120, 255), profile_unlock_hint(fam, layout));
     }
     static const char* const types[3] = {"A", "B", "C"};
     draw_text(hg_type_x(0) - 44, HG_TYPE_Y + 5, 0.42f, dim, "TYPE");
@@ -4789,7 +4844,7 @@ int main(void) {
     static FtlDat dat;
     static AnimDb anims;
     static NameList names;
-    static ShipBlueprint blueprints[MAX_BLUEPRINTS], enemyBps[MAX_BLUEPRINTS];
+    static ShipBlueprint blueprints[MAX_BLUEPRINTS], enemyBps[MAX_ENEMY_BLUEPRINTS];
     static ShipSlots player, enemy;
     static Combat combat;
     char err[128] = "";
@@ -4813,7 +4868,7 @@ int main(void) {
         runLoaded = run_load(&dat);
         items_load(&dat);
         bpCount = ship_list_blueprints(&dat, blueprints, MAX_BLUEPRINTS);
-        enemyCount = ship_list_enemies(&dat, enemyBps, MAX_BLUEPRINTS);
+        enemyCount = ship_list_enemies(&dat, enemyBps, MAX_ENEMY_BLUEPRINTS);
     }
     static TestSetup test;
     bool testing = opened && test_load(&test);
@@ -5419,8 +5474,7 @@ int main(void) {
                 paused = false;
                 sRun.view.ship = NULL;
             } else {
-                const char* bp = run_ship_blueprint(sRun.view.ship, sRun.view.shipDef);
-                testEnemy = bp ? find_blueprint(enemyBps, enemyCount, bp) : -1;
+                testEnemy = pick_enemy(enemyBps, enemyCount, run_ship_blueprint(sRun.view.ship, sRun.view.shipDef), sRun.sector);
                 sRun.view.ship = NULL;
                 NEW_FIGHT();
             }
@@ -5483,6 +5537,7 @@ int main(void) {
             float before = sJumpTime;
             sJumpTime += dt;
             if (before < JUMP_OUT && sJumpTime >= JUMP_OUT) {
+                u64 changeStart = osGetTime();
                 if (haveEnemy) {  // escaped: no reward, and anyone still over there is left behind
                     strand_boarders(PLAYER_SHIP, PLAYER_CREW, ENEMY_CREW);
                     END_FIGHT();
@@ -5509,8 +5564,9 @@ int main(void) {
                     run_jump(&sRun, RCTX, sJumpTarget);  // plays jumpArrive
                 }
                 ach_arrived();
+                sJumpChangeMs = (unsigned)(osGetTime() - changeStart);  // test builds report it
             }
-            if (before >= JUMP_OUT && sBackdropLoading && sJumpTime > JUMP_OUT + 0.05f) sJumpTime = JUMP_OUT + 0.05f;
+            // No waiting for the new backdrop: it fades in when it's ready (draw_backdrop).
             if (sJumpTime >= JUMP_OUT + JUMP_IN) sJumpTime = -1.0f;
         }
         // The beacon's ship, if its event has one, built once the jump is over (doing it at the
@@ -5520,12 +5576,14 @@ int main(void) {
             preloadPending = false;
             const XNode *arrShip, *arrDef;
             if (sInRun && !haveEnemy && run_arrival_ship(&sRun, &arrShip, &arrDef)) {
-                const char* bp = run_ship_blueprint(arrShip, arrDef);
-                int pick = bp ? find_blueprint(enemyBps, enemyCount, bp) : -1;
+                int pick = pick_enemy(enemyBps, enemyCount, run_ship_blueprint(arrShip, arrDef), sRun.sector);
                 if (pick >= 0) {
+                    u64 loadStart = osGetTime();
                     gpu_idle();
                     ship_generate_enemy(&sEnemyBp, &enemyBps[pick], sRun.sector, sRun.difficulty);
-                    if (slots_load(&enemy, &dat, &anims, &names, &sEnemyBp, err, sizeof(err))) {
+                    bool loaded = slots_load(&enemy, &dat, &anims, &names, &sEnemyBp, err, sizeof(err));
+                    sShipLoadMs = (unsigned)(osGetTime() - loadStart);
+                    if (loaded) {
                         sPreloadFor = arrDef ? (const void*)arrDef : (const void*)arrShip;
                         sVisitor = true;  // in view while its event plays out
                         FIT_ENEMY_CAMERAS_FOR(&enemy.ships[enemy.cur]);

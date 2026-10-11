@@ -201,6 +201,10 @@ void crew_spawn(CrewSet* cs, const Ship* ship, FtlDat* dat, const AnimDb* db, co
     for (int k = 0; k < bp->crewKinds; k++) {
         for (int n = 0; n < bp->crew[k].amount && cs->count < MAX_CREW; n++) {
             const char* race = bp->crew[k].race;
+            if (!strcmp(race, "random")) {  // pirates' mixed crews: any race, each its own (uniform: our choice)
+                static const char* const races[] = {"human", "engi", "mantis", "rock", "energy", "slug", "anaerobic"};
+                race = races[rand() % 7];
+            }
             bool female = !strcmp(race, "human") && (rand() & 1);
             int ri = race_get(cs, dat, db, race, female ? "female" : race);
             if (ri < 0) continue;

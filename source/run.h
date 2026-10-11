@@ -216,7 +216,7 @@ void run_ship_thresholds(const Run* run, int* surrender, int* escape, float* esc
 // Shows the current enemy's <surrender>, <escape> or <gotaway> event. False if it has none.
 bool run_ship_event(Run* run, RunCtx* ctx, const char* which);
 
-// The name of the enemy blueprint a ship node wants (picked from its list), or NULL.
+// The event ship's auto_blueprint: one ship, or a blueprint list to pick from (main.c's pick_enemy).
 const char* run_ship_blueprint(const XNode* ship, const XNode* def);
 // The ship the beacon's event is about, if any: one already hostile (ship set) or one that may turn
 // hostile through a choice (only def set). For loading it ahead of the fight.

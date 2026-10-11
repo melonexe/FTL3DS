@@ -228,7 +228,7 @@ static void scan(const char* xml) {
 
 bool weapons_load(FtlDat* dat) {
     static const char* const files[] = {"data/blueprints.xml", "data/autoBlueprints.xml", "data/dlcBlueprints.xml",
-                                        "data/dlcBlueprintsOverwrite.xml"};
+                                        "data/dlcBlueprintsOverwrite.xml", "data/dlcPirateBlueprints.xml"};
     for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
         char* xml = (char*)ftldat_read(dat, files[i], NULL);
         if (xml) scan(xml);

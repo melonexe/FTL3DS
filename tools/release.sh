@@ -27,6 +27,9 @@ FTL3DS $VERSION - an engine for FTL: Faster Than Light on the Nintendo 3DS.
 This contains no part of FTL. You need your own copy of FTL: Faster Than Light (version 1.6 or
 later, e.g. Steam, GOG or Humble) for its data file, ftl.dat.
 
+Your 3DS needs custom firmware: set it up with https://3ds.hacks.guide/ first. That guide also
+installs FBI and the sound firmware homebrew needs (if the game says "No sound", see the guide).
+
 EASIEST (Windows): run FTL2CIA.exe. It finds FTL (or pick your ftl.dat), and makes
 ftl3ds.cia with your game data inside. Install that CIA with FBI. Keep it to yourself: it contains
 your copy of FTL's data.
@@ -36,9 +39,6 @@ OR, by hand:
 2. Copy it to your SD card as:   sdmc:/3ds/ftl3ds/ftl.dat
 3. Install ftl3ds.cia with FBI (or another CIA installer), or copy ftl3ds.3dsx to sdmc:/3ds/ and
    start it from the Homebrew Launcher.
-
-Your 3DS needs custom firmware: set it up with https://3ds.hacks.guide/ first. That guide also
-installs FBI and the sound firmware homebrew needs (if the game says "No sound", see the guide).
 
 Saves and progress are kept in sdmc:/3ds/ftl3ds/.
 

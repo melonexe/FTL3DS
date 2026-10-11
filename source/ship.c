@@ -275,14 +275,14 @@ void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sect
     }
 }
 
-int ship_list_enemies(FtlDat* dat, ShipBlueprint* out, int max) {
-    char* xml = (char*)ftldat_read(dat, "data/autoBlueprints.xml", NULL);
-    if (!xml) return 0;
-    int count = 0;
+// Enemy ships from one file; a name already listed is replaced (later files override earlier ones).
+static int scan_enemies(FtlDat* dat, const char* file, ShipBlueprint* out, int count, int max) {
+    char* xml = (char*)ftldat_read(dat, file, NULL);
+    if (!xml) return count;
     const char* p = xml;
     const char* end;
     const char* tag;
-    while (count < max && (tag = xml_find_tag(p, "shipBlueprint", &end)) != NULL) {
+    while ((tag = xml_find_tag(p, "shipBlueprint", &end)) != NULL) {
         p = end + 1;
         ShipBlueprint bp;
         memset(&bp, 0, sizeof(bp));
@@ -290,18 +290,36 @@ int ship_list_enemies(FtlDat* dat, ShipBlueprint* out, int max) {
             !xml_attr(tag, end, "layout", bp.layout, sizeof(bp.layout)) ||
             !xml_attr(tag, end, "img", bp.img, sizeof(bp.img)))
             continue;
-        if (strstr(bp.name, "BOSS") || strstr(bp.name, "FLAGSHIP")) continue;
+        if (!strncmp(bp.name, "PLAYER_SHIP_", 12) || strstr(bp.name, "BOSS") || strstr(bp.name, "FLAGSHIP")) continue;
         const char* limit = strstr(p, "</shipBlueprint>");
         parse_crew(&bp, p, limit);
         parse_systems(&bp, p, limit);
         bp.enemy = true;
+        bp.minSector = 1;
+        const char* e2;
+        char buf[8];
+        if (xml_find_tag_before(p, limit, "minSector", &e2) && xml_text(e2, buf, sizeof(buf))) bp.minSector = atoi(buf);
         char path[96];
         snprintf(path, sizeof(path), "data/%s.txt", bp.layout);
         if (!ftldat_find(dat, path)) continue;
-        out[count++] = bp;
+        int at = -1;
+        for (int i = 0; i < count && at < 0; i++)
+            if (!strcmp(out[i].name, bp.name)) at = i;
+        if (at < 0 && count < max) at = count++;
+        if (at >= 0) out[at] = bp;
     }
     free(xml);
     return count;
+}
+
+int ship_list_enemies(FtlDat* dat, ShipBlueprint* out, int max) {
+    // As the game loads them (xftl BlueprintManager): the original ships, then the Advanced
+    // Edition's (Lanius ships, the *_DLC variants and updated lists) and its pirate versions.
+    static const char* const files[] = {"data/autoBlueprints.xml", "data/dlcBlueprints.xml", "data/dlcBlueprintsOverwrite.xml",
+                                        "data/dlcPirateBlueprints.xml"};
+    int n = 0;
+    for (size_t f = 0; f < sizeof(files) / sizeof(files[0]); f++) n = scan_enemies(dat, files[f], out, n, max);
+    return n;
 }
 
 bool ship_find_boss(FtlDat* dat, const char* name, ShipBlueprint* out) {

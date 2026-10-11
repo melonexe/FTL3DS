@@ -1,0 +1,12 @@
+# Pirate encounters use FTL's pirate ship variants (dlcPirateBlueprints.xml) with mixed-race crews,
+# not a random enemy: the PIRATE event's ship comes from SHIPS_PIRATE.
+ship 1
+seed 6
+event PIRATE
+at 1 do closeevents
+at 3 expect enemy == 1
+at 3 expect enemypirate == 1
+at 3 expect enemycrew >= 2
+at 3 shot pirate
+at 3 log state
+at 4 done

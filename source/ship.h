@@ -12,6 +12,7 @@
 #define MAX_ROOMS 64
 #define MAX_DOORS 96
 #define MAX_BLUEPRINTS 64
+#define MAX_ENEMY_BLUEPRINTS 128  // auto, Lanius, Advanced Edition and pirate ships
 #define MAX_CREW_KINDS 8
 #define GRID_MAX 48  // room-grid tiles per side
 #define MAX_WEAPON_SLOTS 4
@@ -52,6 +53,7 @@ typedef struct {
     int droneCount;
     int droneParts;       // <droneList drones="N">
     char droneLoad[32];   // <droneList load="..."> random list for enemies
+    int minSector;        // <minSector>: enemies, the first sector (1-based) they turn up in
 } ShipBlueprint;
 
 // Augments with effects in combat (counts in Ship.aug; effects from the FTL wiki, Augmentations).

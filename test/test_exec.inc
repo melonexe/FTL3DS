@@ -51,6 +51,11 @@
         if (!strcmp(n, "crew")) return crew_native_count(PLAYER_CREW);
         if (!strcmp(n, "enemy")) return haveEnemy;
         if (!strcmp(n, "enemyhull")) return es ? es->hullHp : -1;
+        if (!strcmp(n, "enemypirate")) {  // a pirate variant (MANTIS_FIGHTER_P...), or its AE version (..._P_DLC)
+            const char* nm = es ? es->bp->name : "";
+            size_t l = strlen(nm);
+            return (l > 2 && !strcmp(nm + l - 2, "_P")) || strstr(nm, "_P_DLC") != NULL;
+        }
         if (!strcmp(n, "enemymaxhull")) return es ? es->maxHull : -1;
         if (!strcmp(n, "enemyshields")) return es ? es->shieldLayers : -1;
         if (!strcmp(n, "enemyzoltan")) return es ? es->superShield : -1;
@@ -89,6 +94,8 @@
         }
         if (!strcmp(n, "menu")) return sMenu;
         if (!strcmp(n, "sandbox")) return sRun.sandbox;
+        if (!strcmp(n, "jumpms")) return sJumpChangeMs;
+        if (!strcmp(n, "shiploadms")) return sShipLoadMs;
         if (!strcmp(n, "weapons")) return PLAYER_SHIP->weaponCount;
         if (!strcmp(n, "visitor")) return sVisitor;
         if (!strcmp(n, "fps")) return 1.0f / sTestFrameTime;
@@ -165,7 +172,7 @@
                                                "enemyzoltan", "enemycrew", "artillery", "result", "bossstage", "env", "ftl",
                                                "scrap", "fuel", "sector", "beacon", "event", "stage", "flagbeacon",
                                                "flagnext", "base", "baseturns", "over", "won", "baselost", "linearfree",
-                                               "textures", "soundmb", "soundheapmb", "sounds", "preloaded", "enemy", "fps", "cpums", "gpums"};
+                                               "textures", "soundmb", "soundheapmb", "sounds", "preloaded", "enemy", "fps", "cpums", "gpums", "jumpms", "shiploadms"};
             char line[768] = "STATE";
             for (size_t k = 0; k < sizeof(keys) / sizeof(keys[0]); k++) {
                 char part[32];

@@ -1202,14 +1202,6 @@ bool run_arrival_ship(const Run* run, const XNode** ship, const XNode** def) {
 const char* run_ship_blueprint(const XNode* ship, const XNode* def) {
     const char* bp = def ? xattr(def, "auto_blueprint") : NULL;
     if (!bp && ship) bp = xattr(ship, "auto_blueprint");
-    if (!bp) return NULL;
-    // Lists can name other lists.
-    for (int depth = 0; depth < 4; depth++) {
-        const char* list[48];
-        int n = weapon_list(bp, list, 48);
-        if (!n) break;
-        bp = list[rand() % n];
-    }
     return bp;
 }
 

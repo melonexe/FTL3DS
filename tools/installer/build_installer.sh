@@ -24,6 +24,7 @@ cp "$CIA/icon.png" payload/icon.png
 cp "$ROOT/ftl3ds.elf" "$CIA/ftl3ds.rsf" payload/
 cp "$CIA/makerom.exe" payload/makerom.exe
 cp "$CIA/bt/windows-x86_64/bannertool.exe" payload/bannertool.exe
+echo "${FTL3DS_VERSION:-dev}" > payload/version.txt  # shown in its title bar and log (release.sh sets it)
 
 python -m PyInstaller --noconfirm --onefile --windowed --name FTL2CIA \
     --add-data "$(cygpath -w "$HERE/payload");payload" --hidden-import pefile \

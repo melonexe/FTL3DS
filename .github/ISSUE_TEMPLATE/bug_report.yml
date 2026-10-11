@@ -104,4 +104,6 @@ body:
     id: extra
     attributes:
       label: Anything else
-      description: e.g. your save or profile from sdmc:/3ds/ftl3ds/ if it happens every time with it (zip it first).
+      description: |
+        Problems with FTL2CIA: attach FTL2CIA.log (next to FTL2CIA.exe).
+        Game bugs: your save or profile from sdmc:/3ds/ftl3ds/ if it happens every time with it (zip it first).

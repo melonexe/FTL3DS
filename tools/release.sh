@@ -14,7 +14,7 @@ if [ ! -f ftl3ds.elf ] || [ ! -f ftl3ds.3dsx ]; then
     exit 1
 fi
 PUBLIC=1 sh tools/cia/build_cia.sh
-sh tools/installer/build_installer.sh  # dist/FTL2CIA.exe
+FTL3DS_VERSION="$VERSION" sh tools/installer/build_installer.sh  # dist/FTL2CIA.exe
 
 OUT="dist/ftl3ds-$VERSION"
 rm -rf "$OUT" "$OUT.zip"

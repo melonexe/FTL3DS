@@ -190,6 +190,12 @@ To try it without packaging: `python tools/installer/ftl2cia.py` (after running 
 once, so `payload/` exists). Run from a plain source download, it has no payload and reports
 "The builder is missing ftl3ds.elf", which is expected: players must use the release's `.exe`.
 
+FTL2CIA writes `FTL2CIA.log` next to itself (or in `%TEMP%` if it can't): its version (from
+`payload/version.txt`, which `release.sh` stamps; "dev" otherwise), Windows and Python versions, the
+bundled files, the paths used, every command with its output and exit code, and full error details.
+Error messages point to it; ask players to attach it to bug reports. It includes their file paths
+(and so usually their Windows user name).
+
 The `.exe` isn't code-signed, so Windows SmartScreen may warn players ("More info → Run anyway").
 
 ## 6. A release
@@ -233,6 +239,7 @@ From any shell with Python:
 | `build_cia.sh` / `build_installer.sh`: makerom or bannertool not found | See [makerom and bannertool](#makerom-and-bannertool-for-every-cia) |
 | `release.sh`: "run make first" | Build the game (step 1) first |
 | FTL2CIA: "missing ftl3ds.elf" | Running `ftl2cia.py` from source: use the packaged `.exe`, or run `build_installer.sh` first |
+| FTL2CIA fails for a player | Ask for `FTL2CIA.log` (next to their `FTL2CIA.exe`) |
 | The game says "Couldn't load ftl.dat" | Not at `sdmc:/3ds/ftl3ds/ftl.dat`, or from FTL before 1.6 |
 | The game says "No sound" | No `sdmc:/3ds/dspfirm.cdc`: on a 3DS, see 3ds.hacks.guide; in Azahar, any file with that name |
 | A test run says "PC in use" | Someone used the PC in the last two minutes; wait, or `-Force` |

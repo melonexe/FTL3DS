@@ -7,8 +7,15 @@ Runs as a packaged .exe (tools/installer/build_installer.sh) or as a script:
     python ftl2cia.py
 The engine files it needs (ftl3ds.elf, ftl3ds.rsf, banner.bnr, icon.png, makerom, bannertool) sit in
 the "payload" folder next to it, or inside the packaged .exe.
+
+Everything it does goes to FTL2CIA.log next to the program (or in %TEMP% if that folder can't be
+written): its version, the system, the paths used, each step, the tools' output and any error in
+full, for bug reports.
 """
+import datetime
 import io
+import platform
+import traceback
 import os
 import shutil
 import struct
@@ -25,6 +32,73 @@ APP = "FTL2CIA"
 def payload_dir():
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "payload")
+
+
+def app_dir():
+    """Where the program itself is: the .exe's folder, or the script's."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def version():
+    """The release this was packaged for (build_installer.sh writes payload/version.txt)."""
+    try:
+        with open(os.path.join(payload_dir(), "version.txt"), encoding="utf-8") as f:
+            return f.read().strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+class Log:
+    """FTL2CIA.log: next to the program, else in %TEMP%. Every line is flushed at once, so the file
+    is complete even if the program dies."""
+
+    def __init__(self):
+        self.path = None
+        self.f = None
+        for folder in (app_dir(), tempfile.gettempdir()):
+            try:
+                path = os.path.join(folder, "FTL2CIA.log")
+                self.f = open(path, "w", encoding="utf-8")
+                self.path = path
+                break
+            except OSError:
+                continue
+
+    def write(self, text):
+        if not self.f:
+            return
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        try:
+            for line in str(text).splitlines() or [""]:
+                self.f.write(f"[{stamp}] {line}\n")
+            self.f.flush()
+        except OSError:
+            pass
+
+    def where(self):
+        return f"\n\nDetails are in {self.path}" if self.path else ""
+
+
+LOG = Log()
+
+
+def log_header():
+    LOG.write(f"FTL2CIA {version()} started {datetime.datetime.now():%Y-%m-%d %H:%M:%S}")
+    LOG.write(f"System: {platform.platform()}; Python {platform.python_version()}; "
+              f"{'packaged' if getattr(sys, 'frozen', False) else 'script'}")
+    LOG.write(f"Program: {sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)}")
+    pay = payload_dir()
+    try:
+        files = ", ".join(f"{n} ({os.path.getsize(os.path.join(pay, n))} bytes)" for n in sorted(os.listdir(pay)))
+    except OSError:
+        files = "MISSING"
+    LOG.write(f"Payload {pay}: {files}")
+
+
+def log_exception(kind, exc_type, exc, tb):
+    LOG.write(f"{kind}:\n" + "".join(traceback.format_exception(exc_type, exc, tb)))
 
 
 def find_dat(path):
@@ -82,11 +156,13 @@ def ftl_icon(exe_path, out_png):
 
 
 def run(cmd, log):
+    LOG.write("Running: " + subprocess.list2cmdline(cmd))
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     p = subprocess.run(cmd, capture_output=True, text=True, creationflags=flags)
     for line in (p.stdout + p.stderr).splitlines():
         if line.strip():
             log(line)
+    LOG.write(f"Exit code {p.returncode}")
     if p.returncode != 0:
         raise RuntimeError(f"{os.path.basename(cmd[0])} failed (code {p.returncode})")
 
@@ -98,7 +174,8 @@ def build_cia(dat_path, out_path, log):
     bannertool = os.path.join(pay, "bannertool" + exe)
     for f in ("ftl3ds.elf", "ftl3ds.rsf", "banner.bnr", "icon.png"):
         if not os.path.isfile(os.path.join(pay, f)):
-            raise RuntimeError(f"The builder is missing {f}: download it again.")
+            raise RuntimeError(f"FTL2CIA is missing {f}. Run FTL2CIA.exe from the release zip on the "
+                               "Releases page (not the \"Source code\" download), and keep it whole.")
     with tempfile.TemporaryDirectory(prefix="ftl3ds_") as work:
         romfs = os.path.join(work, "romfs")
         os.makedirs(romfs)
@@ -120,12 +197,14 @@ def build_cia(dat_path, out_path, log):
              "-target", "t", f"-DAPP_ROMFS={romfs}", "-major", "0", "-minor", "1", "-micro", "0"], log)
     if not os.path.isfile(out_path):
         raise RuntimeError("makerom didn't write the CIA.")
+    LOG.write(f"Wrote {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
 class App:
     def __init__(self, root):
         self.root = root
-        root.title(APP)
+        root.title(f"{APP} {version()}")
+        root.report_callback_exception = lambda t, v, tb: self.crash("Error in the window", t, v, tb)
         root.resizable(False, False)
         f = ttk.Frame(root, padding=14)
         f.grid()
@@ -184,7 +263,13 @@ class App:
         if p:
             self.out.set(p)
 
+    def crash(self, kind, t, v, tb):
+        log_exception(kind, t, v, tb)
+        messagebox.showerror(APP, f"Something went wrong: {v}{LOG.where()}")
+
     def log(self, text):
+        LOG.write(text)
+
         def add():
             self.log_box.configure(state="normal")
             self.log_box.insert("end", text + "\n")
@@ -195,16 +280,20 @@ class App:
     def start(self):
         dat = find_dat(self.dat.get().strip().strip('"'))
         out = self.out.get().strip().strip('"')
+        LOG.write(f"Build pressed: ftl.dat field {self.dat.get()!r}, save as {out!r}")
+
+        def refuse(msg):
+            LOG.write("Refused: " + msg)
+            messagebox.showerror(APP, msg)
+
         if not dat:
-            messagebox.showerror(APP, "Couldn't find ftl.dat there. Pick the ftl.dat file in your FTL folder.")
-            return
+            return refuse("Couldn't find ftl.dat there. Pick the ftl.dat file in your FTL folder.")
+        LOG.write(f"ftl.dat: {dat} ({os.path.getsize(dat)} bytes)")
         if not check_dat(dat):
-            messagebox.showerror(APP, "That isn't an FTL 1.6+ ftl.dat. Older FTL versions (data.dat) aren't "
-                                      "supported: update FTL, or check the file isn't modded.")
-            return
+            return refuse("That isn't an FTL 1.6+ ftl.dat. Older FTL versions (data.dat) aren't "
+                          "supported: update FTL, or check the file isn't modded.")
         if not out:
-            messagebox.showerror(APP, "Choose where to save the CIA.")
-            return
+            return refuse("Choose where to save the CIA.")
         if not out.lower().endswith(".cia"):
             out += ".cia"
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
@@ -218,14 +307,33 @@ class App:
                 self.root.after(0, lambda: messagebox.showinfo(APP, f"Made {out}\n\nInstall it on your 3DS with FBI."))
             except Exception as e:
                 self.log("Error: " + str(e))
-                err = str(e)
+                LOG.write(traceback.format_exc())
+                err = str(e) + LOG.where()
                 self.root.after(0, lambda: messagebox.showerror(APP, err))
             finally:
                 self.root.after(0, lambda: (self.bar.stop(), self.go.configure(state="normal")))
         threading.Thread(target=work, daemon=True).start()
 
 
+def main():
+    sys.excepthook = lambda t, v, tb: log_exception("Unhandled error", t, v, tb)
+    threading.excepthook = lambda a: log_exception("Error in a thread", a.exc_type, a.exc_value, a.exc_traceback)
+    log_header()
+    try:
+        root = tk.Tk()
+        App(root)
+        LOG.write("Window open")
+        root.mainloop()
+        LOG.write("Closed")
+    except Exception:
+        LOG.write("Couldn't start:\n" + traceback.format_exc())
+        # No window to show it in: a plain Windows message box.
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, f"FTL2CIA couldn't start.{LOG.where()}", APP, 0x10)
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
-    root = tk.Tk()
-    App(root)
-    root.mainloop()
+    main()

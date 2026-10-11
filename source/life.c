@@ -307,16 +307,19 @@ static bool roomFires(const Ship* s, int room) { return life_room_fires(s, room)
 
 // ---- Update ----------------------------------------------------------------------
 
-void life_update(Ship* s, CrewSet* cs, float dt) {
-    // Doors.
+void life_update_doors(Ship* s, float dt, bool paused) {
     for (int i = 0; i < s->doorCount; i++) {
         DoorState* d = &s->doorState[i];
         bool open = d->forced || d->hold > 0.0f;
-        d->hold -= dt;
+        if (!paused) d->hold -= dt;  // crew walking through: frozen while paused, so their doors stay open
         d->anim += (open ? DOOR_SPEED : -DOOR_SPEED) * dt;
         if (d->anim < 0.0f) d->anim = 0.0f;
         if (d->anim > 1.0f) d->anim = 1.0f;
     }
+}
+
+void life_update(Ship* s, CrewSet* cs, float dt) {
+    life_update_doors(s, dt, false);
 
     update_oxygen(s, cs, dt);
     update_fires(s, cs, dt);

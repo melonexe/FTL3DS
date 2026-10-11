@@ -6134,6 +6134,7 @@ int main(void) {
                               (1.0f + 0.25f * ship->aug[AUG_FTL_BOOST]);
             if (sFtlCharge > 1.0f) sFtlCharge = 1.0f;
         }
+        if (paused && sTestHold <= 0.0f) life_update_doors(ship, dt, true);  // doors tapped while paused still move
         if (!frozen) {
             crew_update(crew, ship, dt);
             life_update(ship, crew, dt);

@@ -17,10 +17,16 @@
 #define MUSIC_BUFS 3
 #define MUSIC_FRAMES 4096  // per buffer, about 93 ms at 44.1 kHz
 #define MUSIC_VOLUME 0.75f
-// The 3DS speakers are quiet: sound effects play louder than sounds.xml asks (ndsp gains above 1
-// amplify; the quietest effects are at 0.2 there).
-#define SFX_GAIN 1.8f
-#define SFX_MAX 1.3f
+// The 3DS speakers are quiet and FTL's audio is mastered with lots of headroom (music averages
+// about -21 dBFS, half the effects peak below 0.42), so both are played louder than recorded.
+// Effects: sounds.xml's volume times SFX_GAIN, but never more than takes that sound's own peak to
+// SFX_PEAK (measured when it's decoded), so no effect clips on its own.
+#define SFX_GAIN 3.0f
+#define SFX_PEAK 0.97f
+// Music: every decoded sample is boosted by MUSIC_BOOST, and the rare peaks that would pass
+// MUSIC_KNEE of full scale are rounded off smoothly (a soft limiter) instead of clipping.
+#define MUSIC_BOOST 1.8f
+#define MUSIC_KNEE 0.7f
 // Music timings from xftl (doc/music): explore <-> battle crossfade over 2 s, the explore version at
 // 80% of the battle version's volume; changing playlists fades out over 0.75 s and starts the new
 // one 2 s after the fade began.
@@ -43,6 +49,7 @@ typedef struct {
     bool linear;  // pcm moved to linear memory (the DSP reads it from there); main thread only
     bool priority;  // must not go missing (ship explosions): preloaded first, never cut off
     u64 pendingAt;  // when playPending was set (ms): a play left waiting too long is dropped
+    float peak;     // loudest sample, 0..1 of full scale (for SFX_PEAK)
 } Sfx;
 
 typedef struct {
@@ -294,6 +301,12 @@ static void shrink_pcm(Sfx* s) {
     }
     s->channels = ch;
     s->frames = out;
+    int peak = 0;
+    for (u32 i = 0; i < out * ch; i++) {
+        int a = p[i] < 0 ? -p[i] : p[i];
+        if (a > peak) peak = a;
+    }
+    s->peak = peak / 32768.0f;
     s16* small = realloc(p, (size_t)out * ch * 2);
     if (small) s->pcm = small;
 }
@@ -416,6 +429,26 @@ static void stream_mix(Stream* st) {
     ndspChnSetMix(st->chn, mix);
 }
 
+// MUSIC_BOOST with a soft knee, as a table from every 16-bit sample to its output: linear up to
+// MUSIC_KNEE, then easing towards full scale (y = knee + (1 - knee) * u / (1 + u)) so loud passages
+// round off instead of clipping. Built once (128 KB).
+static s16* sMusicCurve;
+
+static void music_curve_init(void) {
+    if (sMusicCurve) return;
+    sMusicCurve = malloc(65536 * sizeof(s16));
+    if (!sMusicCurve) return;
+    for (int i = 0; i < 65536; i++) {
+        float x = (i - 32768) / 32768.0f * MUSIC_BOOST, a = x < 0.0f ? -x : x;
+        if (a > MUSIC_KNEE) {
+            float u = (a - MUSIC_KNEE) / (1.0f - MUSIC_KNEE);
+            a = MUSIC_KNEE + (1.0f - MUSIC_KNEE) * u / (1.0f + u);
+        }
+        int y = (int)((x < 0.0f ? -a : a) * 32767.0f);
+        sMusicCurve[i] = (s16)(y > 32767 ? 32767 : y < -32768 ? -32768 : y);
+    }
+}
+
 // Fills one buffer, looping the track at its end.
 static bool stream_fill(Stream* st, ndspWaveBuf* b) {
     size_t want = MUSIC_FRAMES * st->channels * 2, got = 0;
@@ -433,6 +466,8 @@ static bool stream_fill(Stream* st, ndspWaveBuf* b) {
     }
     if (got == 0) return false;
     b->nsamples = got / (2 * st->channels);
+    if (sMusicCurve)
+        for (size_t i = 0; i < got / 2; i++) b->data_pcm16[i] = sMusicCurve[(u16)(b->data_pcm16[i] + 32768)];
     DSP_FlushDataCache(b->data_pcm16, got);
     ndspChnWaveBufAdd(st->chn, b);
     return true;
@@ -664,6 +699,7 @@ bool sound_init(FtlDat* dat) {
         sMusic.s[k].pcm = linearAlloc(MUSIC_BUFS * MUSIC_FRAMES * 2 * sizeof(s16));
         sMusic.s[k].chn = k;
     }
+    music_curve_init();
     LightEvent_Init(&sMusic.wake, RESET_ONESHOT);
     LightLock_Init(&sMusic.lock);
     ndspSetCallback(dsp_callback, NULL);
@@ -707,6 +743,8 @@ void sound_exit(void) {
     for (int i = 0; i < sSfxCount; i++)
         if (sSfx[i].pcm) (sSfx[i].linear ? linearFree : free)(sSfx[i].pcm);
     for (int k = 0; k < 2; k++) linearFree(sMusic.s[k].pcm);
+    free(sMusicCurve);
+    sMusicCurve = NULL;
     sReady = false;
 }
 
@@ -884,7 +922,8 @@ static bool start_on_channel(Sfx* s, int ch, bool loop) {
     ndspChnSetRate(ch, (float)s->rate);
     ndspChnSetFormat(ch, s->channels == 2 ? NDSP_FORMAT_STEREO_PCM16 : NDSP_FORMAT_MONO_PCM16);
     float g = s->volume * SFX_GAIN * sSfxVol;
-    if (g > SFX_MAX) g = SFX_MAX;  // the loudest stay clear of clipping
+    float most = s->peak > 0.01f ? SFX_PEAK / s->peak : 1.0f;  // this sound's own clipping point
+    if (g > most) g = most;
     float mix[12] = {g, g};
     ndspChnSetMix(ch, mix);
     sChanSfx[ch] = s;

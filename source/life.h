@@ -8,6 +8,9 @@
 #define LIFE_SUFFOCATE_BELOW 5.0f
 
 void life_update(Ship* ship, CrewSet* crew, float dt);
+// Just the doors opening and closing: life_update does it; while paused the game calls this alone,
+// so a door tapped during a pause visibly opens or closes.
+void life_update_doors(Ship* ship, float dt, bool paused);
 
 // Crew who died aboard a ship that isn't theirs (boarders), since the last call: the owner's clone
 // bay brings them back, as in FTL. With out == NULL the list is just cleared.

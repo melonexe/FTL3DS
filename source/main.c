@@ -950,6 +950,25 @@ static int selected_crystal(const CrewSet* cs) {
     return sel >= 0 && !cs->crew[sel].drone && !strcmp(cs->races[cs->crew[sel].race].name, "crystal") ? sel : -1;
 }
 
+// A short message over the bottom of the crew map (e.g. "Crew stations saved") for a moment.
+#define TOAST_TIME 1.8f
+static char sToast[48];
+static float sToastAt = -100.0f;
+
+static void toast(const char* text) {
+    snprintf(sToast, sizeof(sToast), "%s", text);
+    sToastAt = sClock;
+}
+
+static void draw_toast(void) {
+    float t = sClock - sToastAt;
+    if (t < 0.0f || t > TOAST_TIME || !sToast[0]) return;
+    float w = font_width(0.45f, sToast) + 16, x = (BOT_W - w) * 0.5f, y = MAP_H - 24;
+    round_rect(x, y, w, 20, 4, C2D_Color32(235, 235, 235, 255));  // opaque: round_rect's corners overlap
+    round_rect(x + 1.5f, y + 1.5f, w - 3, 17, 3, C2D_Color32(30, 37, 47, 255));
+    draw_text(x + 8, y + 3, 0.45f, C2D_Color32(235, 235, 235, 255), sToast);
+}
+
 static void draw_crew_tab(const Ship* s, const CrewSet* cs, const Camera* map) {
     const u32 white = C2D_Color32(235, 235, 235, 255), dim = C2D_Color32(150, 160, 170, 255);
     draw_ship(s, map);
@@ -5933,10 +5952,18 @@ int main(void) {
                 life_set_all_doors(ship, touch.px < DOORBTN_X + DOORBTN_W);
             } else if (touch.py >= DOORBTN_Y && touch.py < DOORBTN_Y + DOORBTN_H && touch.px >= STATIONBTN_X &&
                        touch.px < STATIONBTN_X + 2 * DOORBTN_W + 2) {
-                if (touch.px < STATIONBTN_X + DOORBTN_W)
+                if (touch.px < STATIONBTN_X + DOORBTN_W) {
                     crew_save_stations(crew);
-                else
+                    toast("Crew stations saved");
+                } else {
+                    bool away = false;
+                    for (int i = 0; i < crew->count && !away; i++) {
+                        const Crew* m = &crew->crew[i];
+                        away = !m->foreign && !m->drone && m->homeX >= 0 && (m->destX != m->homeX || m->destY != m->homeY);
+                    }
                     crew_return_to_stations(crew, ship);
+                    toast(away ? "Crew returning to stations" : "Crew already at stations");
+                }
                 sound_play("hoverBeep");
             } else if (selected_crystal(crew) >= 0 && touch.py >= LOCKBTN_Y && touch.py < LOCKBTN_Y + LOCKBTN_H &&
                        touch.px >= LOCKBTN_X) {
@@ -6222,6 +6249,7 @@ int main(void) {
         } else if (tab == TAB_CREW) {
             draw_backdrop(&sRun, 0, 0, BOT_W, BOT_H, 0.5f);
             draw_crew_tab(ship, crew, &map);
+            draw_toast();
             draw_effects(&combat, SIDE_PLAYER, &map);
             draw_beams(&combat, SIDE_PLAYER, &map);
             draw_drones(&combat, SIDE_PLAYER, &map);

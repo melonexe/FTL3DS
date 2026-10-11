@@ -1,0 +1,16 @@
+# Stereoscopic 3D at full slider (Azahar shows the left eye): shield domes over both ships, shots
+# arcing out of the screen (drawn shifted and a little bigger mid-flight), explosions settling back.
+# Screenshots only: depth has to be judged on a 3DS.
+ship 1
+enemy REBEL_FAT
+tab fight
+seed 4
+at 0.5 do stereo 100
+at 1 do target 1 shields
+at 1 do autofire 1
+at 3 shot domes
+at 9 shot volley_a
+at 12.2 shot volley_b
+at 15.4 shot volley_c
+at 18.6 shot volley_d
+at 20 done

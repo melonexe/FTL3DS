@@ -34,6 +34,9 @@
 #define BAR_H 24  // crew bar at the bottom of the touch screen
 #define STEREO_FAR 6.0f    // 3D: pixels of eye separation (at full slider) for the starfield, behind
 #define STEREO_NEAR -2.0f  // ... and for the readouts, in front of the screen
+#define STEREO_SHIP 2.0f   // ... the ships, just behind the screen (its edges frame them like a window)
+#define STEREO_POP -3.0f   // ... shots in mid-flight and fresh explosions, out towards the player
+#define STEREO_DOME 3.5f   // ... how far a shield bubble's middle bulges out from its rim
 #define MAP_H (BOT_H - BAR_H)
 #define DOORBTN_X 2  // "open all" / "close all" door buttons on the crew tab
 #define DOORBTN_Y (TAB_H + 2)
@@ -109,6 +112,16 @@ static inline void to_ship(const Camera* c, float X, float Y, float* x, float* y
 
 // How much sprites drawn in ship space must turn.
 static inline float cam_angle(const Camera* c) { return c->rotated ? -(float)M_PI_2 : 0.0f; }
+
+// Stereoscopic 3D: the top screen is drawn once per eye, each thing shifted sideways by its depth
+// (STEREO_*: > 0 behind the screen, < 0 in front) times sEyeShift: the 3D slider, negative for the
+// left eye. 0 when 3D is off, so nothing moves.
+static float sEyeShift, sSlider;
+
+static void stereo_depth(float depth) {
+    C2D_ViewReset();
+    if (sEyeShift != 0.0f) C2D_ViewTranslate(sEyeShift * depth, 0.0f);
+}
 
 // Seconds since the game started, for animations. (osGetTime() counts milliseconds since 1900,
 // far too big to keep sub-second precision in a float.)
@@ -631,6 +644,74 @@ static void draw_shields(const Ship* s, const Camera* cam, float flash) {
         C2D_DrawEllipseSolid(X, Y, 0.0f, 2 * rw * cam->zoom, 2 * rh * cam->zoom,
                              C2D_Color32(80, 160, 255, (u8)(a * 120)));
     }
+}
+
+// 3D only: a glassy dome over the shield bubble, its rim at the ship's depth and its middle out
+// towards the player. A mesh of rings whose every corner gets its own depth (sideways shift), lit
+// from the upper left: a faint body, a brighter rim and a highlight that sells the curve.
+#define DOME_RINGS 5
+#define DOME_SEGS 24
+static void draw_shield_dome(const Ship* s, const Camera* cam, float flash) {
+    if (sEyeShift == 0.0f || s->deathTime >= 0.0f || (s->shieldLayers <= 0 && flash <= 0.0f)) return;
+    // The same ellipse as draw_shields.
+    float ox = (float)(s->xOffset * TILE), oy = (float)(s->yOffset * TILE);
+    float cx = ox + s->hullX + s->hull.width * 0.5f, cy = oy + s->hullY + s->hull.height * 0.5f;
+    if (!s->bp->enemy && s->roomCount > 0) {
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        for (int i = 0; i < s->roomCount; i++) {
+            const Room* r = &s->rooms[i];
+            if (r->x * TILE < x0) x0 = r->x * TILE;
+            if (r->y * TILE < y0) y0 = r->y * TILE;
+            if ((r->x + r->w) * TILE > x1) x1 = (r->x + r->w) * TILE;
+            if ((r->y + r->h) * TILE > y1) y1 = (r->y + r->h) * TILE;
+        }
+        cx = ox + (x0 + x1) * 0.5f + s->ellipse[2];
+        cy = oy + (y0 + y1) * 0.5f + s->ellipse[3];
+    }
+    float rw = s->ellipse[0] > 0 ? s->ellipse[0] : s->hull.width * 0.55f;
+    float rh = s->ellipse[1] > 0 ? s->ellipse[1] : s->hull.height * 0.55f;
+    float strength = 0.6f + 0.15f * s->shieldLayers + (flash > 0.0f ? flash : 0.0f);
+    if (strength > 1.4f) strength = 1.4f;
+
+    // Each mesh corner: screen position (shifted for its depth) and colour. Rings are evenly spaced
+    // in angle up the dome (r = sin, height = cos), so they bunch at the rim where it curves most.
+    static float px[DOME_RINGS + 1][DOME_SEGS], py[DOME_RINGS + 1][DOME_SEGS];
+    static u32 col[DOME_RINGS + 1][DOME_SEGS];
+    const float lx = -0.45f, ly = -0.55f, lz = 0.70f;  // light: upper left, in front
+    for (int k = 0; k <= DOME_RINGS; k++) {
+        float th = (float)M_PI_2 * k / DOME_RINGS, r = sinf(th), h = cosf(th);
+        for (int j = 0; j < DOME_SEGS; j++) {
+            float a = 2.0f * (float)M_PI * j / DOME_SEGS, u = cosf(a) * r, v = sinf(a) * r;
+            float X, Y;
+            to_screen(cam, cx + u * rw, cy + v * rh, &X, &Y);
+            // Lighting in screen terms, so a turned camera keeps the highlight at the upper left.
+            float nu = cam->rotated ? v : u, nv = cam->rotated ? -u : v;
+            float nl = nu * lx + nv * ly + h * lz;
+            float spec = nl > 0.0f ? powf(nl, 10.0f) : 0.0f;
+            float rim = 1.0f - h;  // glancing view near the edge: more glass to look through
+            float alpha = (18.0f + 70.0f * rim * rim + 150.0f * spec) * strength;
+            u8 al = (u8)(alpha > 230.0f ? 230.0f : alpha);
+            col[k][j] = C2D_Color32((u8)(110 + 145 * spec), (u8)(190 + 65 * spec), 255, al);  // blue, white in the highlight
+            px[k][j] = X + sEyeShift * (STEREO_SHIP - STEREO_DOME * h);
+            py[k][j] = Y;
+        }
+    }
+    C2D_ViewReset();  // the shift is in the corners
+    // The cap: a fan round the top.
+    u32 top = col[0][0];
+    float tx = px[0][0], ty = py[0][0];
+    for (int j = 0; j < DOME_SEGS; j++) {
+        int n = (j + 1) % DOME_SEGS;
+        C2D_DrawTriangle(tx, ty, top, px[1][j], py[1][j], col[1][j], px[1][n], py[1][n], col[1][n], 0.0f);
+    }
+    for (int k = 1; k < DOME_RINGS; k++)
+        for (int j = 0; j < DOME_SEGS; j++) {
+            int n = (j + 1) % DOME_SEGS;
+            C2D_DrawTriangle(px[k][j], py[k][j], col[k][j], px[k + 1][j], py[k + 1][j], col[k + 1][j], px[k][n], py[k][n], col[k][n], 0.0f);
+            C2D_DrawTriangle(px[k][n], py[k][n], col[k][n], px[k + 1][j], py[k + 1][j], col[k + 1][j], px[k + 1][n], py[k + 1][n],
+                             col[k + 1][n], 0.0f);
+        }
+    stereo_depth(STEREO_SHIP);
 }
 
 // Ship-space centre of a door (room-grid origin, no X/Y_OFFSET).
@@ -1329,6 +1410,14 @@ static ProjArt proj_art(const Combat* c, const Projectile* p) {
     return a;
 }
 
+// 3D: a shot `pop` (0..1) of the way from the ships' depth out to STEREO_POP. Returns how much bigger
+// to draw it there (1 in 2D), so nearer looks nearer.
+static float proj_depth(float pop) {
+    pop = pop < 0.0f ? 0.0f : pop > 1.0f ? 1.0f : pop;
+    stereo_depth(STEREO_SHIP + (STEREO_POP - STEREO_SHIP) * pop);
+    return 1.0f + 0.2f * pop * sSlider;
+}
+
 static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX) {
     for (int i = 0; i < MAX_SHOTS; i++) {
         const Projectile* p = &c->shots[i];
@@ -1345,9 +1434,11 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
             to_screen(to, p->tx, p->ty, &bx, &by);
             int frame = (int)((elapsed - appear) / 0.75f * art.frames);
             if (frame >= art.frames) frame = art.frames - 1;
+            proj_depth(1.0f - (elapsed - appear) / 0.75f);  // materialises out front, settles on the hull
             sheet_draw_frame_rotated(art.tex, art.fw, art.fh, art.x + frame, art.y, bx, by, to->zoom, 0.0f);
             continue;
         }
+        float pop;  // 0 at the ships, 1 out towards the player
         float x0 = 0, y0 = 0, x1 = 0, y1 = 0, x, y, zoom;
         if (p->inTarget) {
             // Fired by a drone already in the target's space.
@@ -1357,6 +1448,7 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
             x = x0 + (x1 - x0) * p->t;
             y = y0 + (y1 - y0) * p->t;
             zoom = to->zoom;
+            pop = 0.3f * sinf((float)M_PI * p->t);  // a short hop
         } else {
             if (from) to_screen(from, p->sx, p->sy, &x0, &y0);
             if (to) to_screen(to, p->tx, p->ty, &x1, &y1);
@@ -1369,6 +1461,7 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
                 x = x0 + (x1 - x0) * p->t;
                 y = y0 + (y1 - y0) * p->t;
                 zoom = from->zoom + (to->zoom - from->zoom) * p->t;
+                pop = sinf((float)M_PI * (p->t > 1.0f ? 1.0f : p->t));  // an arc out of the screen
             } else {
                 // One ship on screen: the shot moves at its real speed, leaving towards the edge just
                 // after firing, or arriving from it just before it lands.
@@ -1381,6 +1474,7 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
                     x = x0 + dir * v * elapsed;
                     y = y0;
                     if ((x - offX) * dir > 0) continue;  // gone
+                    pop = (x - x0) / (offX - x0);  // leaving towards the player
                 } else {
                     x0 = offX;
                     y0 = y1;
@@ -1388,11 +1482,13 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
                     x = x1 - dir * v * (p->duration - elapsed);
                     y = y1;
                     if ((offX - x) * dir > 0) continue;  // not here yet
+                    pop = (x - x1) / (offX - x1);  // coming in from out front
                 }
             }
         }
         float angle = atan2f(y1 - y0, x1 - x0);
         if (p->weapon == SHOT_ASTEROID) angle = p->t * p->duration * 2.79f + i;
+        zoom *= proj_depth(pop);
         if (art.tex->loaded) {
             if (art.fh > art.fw) angle += (float)M_PI_2;  // missiles are drawn nose-up
             int frame = art.frames > 1 ? (int)(p->t * p->duration / art.time * art.frames) % art.frames : 0;
@@ -1401,6 +1497,7 @@ static void draw_projectiles(const Combat* c, const Camera* cams[2], float offX)
             C2D_DrawCircleSolid(x, y, 0, 3, C2D_Color32(255, 80, 60, 255));
         }
     }
+    stereo_depth(STEREO_SHIP);
 }
 
 // Drones flying in a ship's space (ours around our ship, theirs combat drones too).
@@ -1411,6 +1508,7 @@ static void draw_drones(const Combat* c, int space, const Camera* cam) {
         const DroneSlot* d = &c->ship[e->side]->drones[e->slot];
         float X, Y;
         to_screen(cam, e->x, e->y, &X, &Y);
+        stereo_depth(STEREO_SHIP - 1.5f);
         float scale = cam->zoom < 0.5f ? 0.5f : cam->zoom;  // drone art is padded; keep it readable
         bool charged = (d->def->type == DRONE_COMBAT && e->pause > 0.0f) ||
                        ((d->def->type == DRONE_DEFENSE || d->def->type == DRONE_SHIELD) && e->cooldown <= 0.0f);
@@ -1427,6 +1525,7 @@ static void draw_drones(const Combat* c, int space, const Camera* cam) {
         }
         if (e->stun > 0.0f) C2D_DrawCircleSolid(X, Y, 0, 5 * scale / 0.7f, C2D_Color32(120, 200, 255, 120));
     }
+    stereo_depth(STEREO_SHIP);
 }
 
 static void draw_beams(const Combat* c, int side, const Camera* cam) {
@@ -1482,6 +1581,12 @@ static void draw_effects(const Combat* c, int side, const Camera* cam) {
         float x, y, k = e->t / 0.75f;
         to_screen(cam, e->x, e->y, &x, &y);
         const SheetAnim* ex = e->kind == FX_EXPLOSION ? explosion_anim(e->anim) : NULL;
+        if (e->kind == FX_EXPLOSION) {  // bursts out front, settles back onto the hull
+            float life = ex && ex->tex.loaded && ex->time > 0.0f ? e->t / ex->time : k;
+            stereo_depth(STEREO_SHIP + (STEREO_POP * 0.7f - STEREO_SHIP) * (1.0f - (life > 1.0f ? 1.0f : life)));
+        } else {
+            stereo_depth(e->kind == FX_MISS ? STEREO_SHIP - 2.0f : STEREO_SHIP);
+        }
         if (ex && ex->tex.loaded) {
             int frame = (int)(e->t / ex->time * ex->frames);
             if (frame < ex->frames)
@@ -1498,6 +1603,7 @@ static void draw_effects(const Combat* c, int side, const Camera* cam) {
             draw_text(x - 14, y - 10 - 12 * k, 0.45f, C2D_Color32(255, 255, 255, (u8)(255 * (1 - k))), "MISS");
         }
     }
+    stereo_depth(STEREO_SHIP);
 }
 
 static u32 hull_colour(int hp, int max) {
@@ -2179,6 +2285,7 @@ static bool sTestQuit;
 static u32 sTestKeys;                 // buttons a scenario presses next frame
 static bool sTestTap, sTestTapNow;    // a scenario's touch: pending, and this frame's
 static u16 sTestTapX, sTestTapY;
+static float sTestSlider;  // "do stereo N": the 3D slider at N% (Azahar shows the left eye)
 #else
 #define sTestHold 0.0f
 #endif
@@ -6259,6 +6366,9 @@ int main(void) {
         // Stereoscopic 3D with the slider up: the top screen once per eye, the stars set back
         // behind the screen and the readouts floating a little in front of it.
         float slider = osGet3DSliderState();
+#ifdef FTL_TEST
+        if (sTestSlider > 0.0f) slider = sTestSlider;
+#endif
         bool stereo = slider > 0.0f;
         gfxSet3D(stereo);
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -6266,17 +6376,13 @@ int main(void) {
         clouds_render_layer();
         for (int eye = 0; eye < (stereo ? 2 : 1); eye++) {
         C3D_RenderTarget* topEye = eye ? topRight : top;
-        float eyeSign = eye ? 1.0f : -1.0f;  // depth > 0 is behind the screen
-#define STEREO_DEPTH(d)                                           \
-    do {                                                          \
-        C2D_ViewReset();                                          \
-        C2D_ViewTranslate(eyeSign * slider * (d), 0.0f);          \
-    } while (0)
+        sSlider = stereo ? slider : 0.0f;
+        sEyeShift = stereo ? (eye ? 1.0f : -1.0f) * slider : 0.0f;  // depth > 0 is behind the screen
         C2D_TargetClear(topEye, C2D_Color32(8, 10, 20, 255));
         C2D_SceneBegin(topEye);
-        STEREO_DEPTH(STEREO_FAR);
+        stereo_depth(STEREO_FAR);
         draw_backdrop(&sRun, 0, 0, TOP_W, TOP_H, 0.0f);
-        STEREO_DEPTH(0.0f);
+        stereo_depth(STEREO_SHIP);
         float camX = cam.x;
         cam.x -= jump_offset() / cam.zoom;
         if (split) clip_top(0, ENEMY_X);
@@ -6284,6 +6390,7 @@ int main(void) {
         draw_ship(ship, &cam);
         draw_weapons(ship, &cam);
         draw_crew(ship, crew, &cam);
+        draw_shield_dome(ship, &cam, combat.shieldFlash[SIDE_PLAYER]);
         draw_effects(&combat, SIDE_PLAYER, &cam);
         draw_beams(&combat, SIDE_PLAYER, &cam);
         draw_drones(&combat, SIDE_PLAYER, &cam);
@@ -6295,6 +6402,7 @@ int main(void) {
                 draw_weapons(shown, &ecam);
                 draw_crew(shown, shownCrew, &ecam);
                 draw_shields(shown, &ecam, foe ? combat.shieldFlash[SIDE_ENEMY] : 0.0f);
+                draw_shield_dome(shown, &ecam, foe ? combat.shieldFlash[SIDE_ENEMY] : 0.0f);
             }
             if (foe) draw_effects(&combat, SIDE_ENEMY, &ecam);
             if (foe) draw_beams(&combat, SIDE_ENEMY, &ecam);
@@ -6308,7 +6416,7 @@ int main(void) {
         if (foe) draw_projectiles(&combat, cams, TOP_W + 30);
         cam.x = camX;
         draw_jump_fx();
-        STEREO_DEPTH(STEREO_NEAR);
+        stereo_depth(STEREO_NEAR);
         draw_top_hud(ship, split ? shown : NULL, &combat, paused);
         draw_env_hud(&combat);
         {
@@ -6321,7 +6429,7 @@ int main(void) {
         draw_popup(blueprints, bpCount);
         if ((sStoreOpen || sShipOpen) && !debugOpen) draw_info_top();
         C2D_ViewReset();
-#undef STEREO_DEPTH
+        sEyeShift = sSlider = 0.0f;  // the touch screen is flat
         }
 
         C2D_TargetClear(bottom, C2D_Color32(8, 10, 20, 255));

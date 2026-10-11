@@ -293,6 +293,7 @@
                 for (int k = 0; k < es->systemCount; k++)
                     if (es->systems[k].damage < es->systems[k].def->level) es->systems[k].damage++;
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
+            else if (!strcmp(a1, "stereo")) sTestSlider = n1 / 100.0f;  // 3D slider, percent
             else if (!strcmp(a1, "store") && sInRun) {  // this beacon's store (stocked if new) on tab n1
                 run_store_enter(&sRun, RCTX);
                 sStoreOpen = true;

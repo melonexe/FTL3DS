@@ -364,6 +364,21 @@ static const Texture* small_icon(int type) {
     return sSmallIcon[type].loaded ? &sSmallIcon[type] : NULL;
 }
 
+// FTL's full-size room icons (img/icons/s_*_overlay.png), made once per system type: for views
+// without a loaded ship (the hangar preview).
+static Texture sFullIcon[SYS_COUNT];
+static const Texture* full_icon(int type) {
+    static bool tried[SYS_COUNT];
+    if (type < 0 || type >= SYS_COUNT) return NULL;
+    if (!tried[type]) {
+        tried[type] = true;
+        char path[64];
+        snprintf(path, sizeof(path), "img/icons/s_%s_overlay.png", system_name(type));
+        load_crop(&sFullIcon[type], path, 0, 0, 0, 0, false);
+    }
+    return sFullIcon[type].loaded ? &sFullIcon[type] : NULL;
+}
+
 // The icon to draw in a room at this zoom: FTL's own at 1:1 when the room has space for it,
 // otherwise the sharp small one. Always drawn unscaled.
 static const Texture* room_icon(const ShipSystem* y, const Room* r, const Camera* cam) {
@@ -4522,21 +4537,27 @@ static void draw_hangar_preview(bool loading) {
         draw_rect(&c, x, y, w, h, C2D_Color32(64, 62, 60, 255));
         draw_rect(&c, x + 2, y + 2, w - 4, h - 4, C2D_Color32(226, 220, 212, 255));
     }
+    // System icons as the ship view draws them (room_icon): FTL's own at 1:1 where the room has
+    // space, else the sharp small one; multiplied green so the black outline stays black.
+    C2D_SetTintMode(C2D_TintMult);
     for (int k = 0; k < s->bp->systemCount; k++) {
         const SystemDef* d = &s->bp->systems[k];
         for (int i = 0; i < s->roomCount; i++) {
             if (s->rooms[i].id != d->roomId) continue;
-            const Texture* t = small_icon(d->type);
-            if (!t) break;
             const Room* r = &s->rooms[i];
+            float room = (r->w < r->h ? r->w : r->h) * TILE * c.zoom;
+            const Texture* big = full_icon(d->type);
+            const Texture* t = big && room >= big->width + 2 ? big : small_icon(d->type);
+            if (!t) break;
             float X, Y;
             to_screen(&c, ox + (r->x + r->w * 0.5f) * TILE, oy + (r->y + r->h * 0.5f) * TILE, &X, &Y);
             C2D_ImageTint tint;
-            C2D_PlainImageTint(&tint, C2D_Color32(80, 200, 90, 255), 1.0f);
+            C2D_PlainImageTint(&tint, C2D_Color32(120, 235, 120, 255), 1.0f);
             C2D_DrawImageAt(t->image, floorf(X - t->width * 0.5f), floorf(Y - t->height * 0.5f), 0, &tint, 1, 1);
             break;
         }
     }
+    C2D_SetTintMode(C2D_TintSolid);
     if (loading) {  // the hull is still decoding: say so, with dots that move
         int dots = (int)(sClock * 3) % 4;
         char msg[16];

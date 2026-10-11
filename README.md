@@ -103,67 +103,27 @@ the top-left buttons are SHIP and JUMP.
 
 ## Building
 
-1. Install [devkitPro](https://devkitpro.org/wiki/Getting_Started) with **3DS Development** selected.
-2. In the devkitPro MSYS2 terminal, install the extra libraries:
-   ```
-   pacman -S 3ds-zlib 3ds-libpng 3ds-libvorbisidec
-   ```
-3. From the same terminal, run `make` in this folder. This produces `ftl3ds.3dsx` and `ftl3ds.elf`.
+**[BUILDING.md](BUILDING.md)** has the full guide: setting up devkitPro, Python, makerom,
+bannertool and Azahar, then every build (the game, the test build and scenario tests, personal and
+public CIAs, FTL2CIA, releases), the PC tools and troubleshooting.
 
-### CIAs and releases
+The short version, in the devkitPro MSYS2 shell:
 
-These need makerom.exe (3DSGuy/Project_CTR) in `tools/cia/` and bannertool
-(diasurgical/bannertool) in `tools/cia/bt/`, and `make` run first.
+```
+pacman -S 3ds-zlib 3ds-libpng 3ds-libvorbisidec   # once
+make                                               # ftl3ds.3dsx and ftl3ds.elf
+make TEST=1                                        # the test build (ftl3ds_test.3dsx)
+```
 
-- **Release:** `tools/release.sh [version]` packs `dist/ftl3ds-<version>.zip`: FTL2CIA, the
-  `.3dsx`, a public CIA (`PUBLIC=1 tools/cia/build_cia.sh`: empty romfs, generated starfield icon
-  and banner) and install notes. It refuses to package anything that looks like it holds an
-  `ftl.dat`.
-- **FTL2CIA:** `tools/installer/build_installer.sh` packages `tools/installer/ftl2cia.py` as
-  `dist/FTL2CIA.exe` (needs Python with PyInstaller, pefile and Pillow). It carries only the
-  engine, makerom, bannertool and the generated banner.
-- **Personal CIA:** `tools/cia/build_cia.sh "<path to your ftl.dat>"` builds `ftl3ds.cia` with your
-  `ftl.dat` inside and FTL's own icon. For your own console only.
+then, for CIAs and releases (Git Bash, with makerom and bannertool in `tools/cia/`):
+
+```
+sh tools/cia/build_cia.sh "<path to ftl.dat>"     # personal CIA, your ftl.dat inside
+sh tools/release.sh 0.1.1                         # release zip: FTL2CIA, public CIA, .3dsx
+```
 
 `.gitignore` keeps `ftl.dat` (any letter case), romfs folders, CIAs, builds and anything else made
 from FTL's files out of the repository.
-
-## Scenario tests
-
-Testing has its own build, so the game you play never contains test code (and never reads a
-`test.txt`). The test build also has debug controls: SELECT opens a debug menu (any ship and enemy,
-quick actions), L + R + Y starts a fire and breach on your ship, L + R + B destroys the enemy.
-
-```
-make TEST=1                                          # builds ftl3ds_test.3dsx in build_test/
-powershell tools/test/run_scenario.ps1 tools/test/scenarios/boss1.txt
-powershell tools/test/run_all.ps1 [-Filter hazard_*]
-```
-
-A scenario (`tools/test/scenarios/*.txt`) sets a situation up and then runs timed commands inside
-the game, acting on its state directly rather than by tapping the screen:
-
-```
-boss 1                     # setup: a fight with flagship stage 1 (see source/testhooks.h for all keys:
-ship 1                     #   ship, enemy, event, crew, tab, seed, weapons, enemyfire, enemyhull,
-tab fight                  #   paused, board, skills, memory, env, boss, laststand, title)
-at 1 expect artillery == 4 # PASS or FAIL in the log
-at 2 do target 1 shields   # act: target, destroy, jump, wait, choose, key, tap, ... (test/test_exec.inc)
-at 3 shot fighting         # the runner screenshots the Azahar window
-at 4 log state             # a line of game state (fps, memory and more)
-at 5 done
-```
-
-The runner copies the scenario to the emulated SD card, starts Azahar with the test build, follows
-`test.log`, saves screenshots to `build_test/scenarios/<name>/`, and ends with a pass / fail count.
-It won't take over the screen while someone is using the PC (`-Force` to override). Test runs keep
-their own profile (`profile_test.txt`, everything unlocked).
-
-## PC tools
-
-- `tools/ftldat.py list|extract <ftl.dat> ...` lists and extracts archive files.
-- `tools/preview.py <ftl.dat>` writes `build/preview.html`, which renders every player ship with the
-  same maths as the 3DS code.
 
 ## Code layout
 

@@ -1,0 +1,17 @@
+# Readability of the store's item names and the SHIP screen's equipment (screenshots).
+ship 1
+seed 11
+at 1 do closeevents
+at 1.2 do aug FTL_JUMPER
+at 1.2 do aug EXPLOSIVE_REPLICATOR
+at 1.5 do store 1
+at 2 shot store_1
+at 3.5 do store 2
+at 4 shot store_2
+at 5.5 do store 3
+at 6 shot store_3
+at 7.5 do store 9
+at 8 shot store_sell
+at 9.5 do shipmenu 1
+at 10 shot equipment
+at 11 done

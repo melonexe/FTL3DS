@@ -221,3 +221,9 @@ const char* run_ship_blueprint(const XNode* ship, const XNode* def);
 // The ship the beacon's event is about, if any: one already hostile (ship set) or one that may turn
 // hostile through a choice (only def set). For loading it ahead of the fight.
 bool run_arrival_ship(const Run* run, const XNode** ship, const XNode** def);
+// <status target="enemy"> from the beacon's event, for its enemy ship: taken (and cleared) once the
+// fight is on. sys is a SYS_* type, op an EVSTAT_*.
+typedef struct {
+    int sys, op, amount;
+} EnemyStatus;
+int run_take_enemy_status(EnemyStatus* out, int max);

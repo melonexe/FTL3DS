@@ -103,6 +103,11 @@
         if (!strcmp(n, "gpums")) return C3D_GetDrawingTime();
         if (!strcmp(n, "preloaded")) return sPreloadFor != NULL;  // an enemy ship built during the last jump
         if (!strcmp(n, "fires")) return life_ship_fires(ps);
+        if (!strcmp(n, "intruders")) return crew_foreign_count(PLAYER_CREW);
+        if (!strncmp(n, "cap_", 4)) {  // a system's event limit (<status>): -1 none, -2 no such system
+            int si = ship_find_system(ps, system_from_name(n + 4));
+            return si >= 0 ? ps->systems[si].eventCap : -2;
+        }
         if (!strcmp(n, "lockdowns")) {
             int l = 0;
             for (int r = 0; r < ps->roomCount; r++) l += ps->lockdown[r] > 0.0f;
@@ -288,6 +293,16 @@
                 for (int k = 0; k < es->systemCount; k++)
                     if (es->systems[k].damage < es->systems[k].def->level) es->systems[k].damage++;
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
+            else if (!strcmp(a1, "store") && sInRun) {  // this beacon's store (stocked if new) on tab n1
+                run_store_enter(&sRun, RCTX);
+                sStoreOpen = true;
+                sStoreTab = n1;
+                sStoreSel = -1;
+            } else if (!strcmp(a1, "shipmenu") && sInRun) {  // the SHIP screen: 0 upgrades, 1 equipment
+                sStoreOpen = false;
+                sShipOpen = true;
+                sShipTab = n1;
+            }
             else if (!strcmp(a1, "lockdown")) {
                 bool done = false;
                 for (int i = 0; i < PLAYER_CREW->count && !done; i++)

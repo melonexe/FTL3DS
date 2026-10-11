@@ -1,0 +1,9 @@
+# <boarders>: MANTIS_BOARDERS beams 2-4 Mantis aboard as intruders (they used to never arrive).
+ship 1
+seed 7
+event MANTIS_BOARDERS
+at 1 expect intruders >= 2
+at 1 do closeevents
+at 2 shot boarders
+at 2 log state
+at 3 done

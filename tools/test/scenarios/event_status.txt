@@ -1,0 +1,10 @@
+# <status>: NEBULA_SLUG_OXYGEN limits our oxygen to 0 bars at this beacon; a jump lifts it.
+ship 1
+seed 7
+event NEBULA_SLUG_OXYGEN
+at 1 expect cap_oxygen == 0
+at 1 do closeevents
+at 2 shot limited
+at 3 do jump near
+at 6 expect cap_oxygen == -1
+at 7 done

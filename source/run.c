@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "combat.h"
 #include "items.h"
@@ -40,6 +41,15 @@ static Named sImageLists[60];
 static int sImageListCount;
 static XDoc sSectorDoc;
 static const XNode* sShipDef;  // the ship the current beacon's event is about (<ship load=...>)
+static EnemyStatus sEnemyStatus[8];  // <status target="enemy">, for the beacon's enemy ship
+static int sEnemyStatusCount;
+
+int run_take_enemy_status(EnemyStatus* out, int max) {
+    int n = sEnemyStatusCount < max ? sEnemyStatusCount : max;
+    memcpy(out, sEnemyStatus, sizeof(EnemyStatus) * n);
+    sEnemyStatusCount = 0;
+    return n;
+}
 
 // ---- Saving: event pointers as numbers ----------------------------------------------------------
 
@@ -236,11 +246,12 @@ static const float SCRAP_MULT[3][2] = {{0.5f, 0.7f}, {0.8f, 1.3f}, {1.3f, 1.55f}
 static int roll(const int r[2]) { return r[0] + rand() % (r[1] - r[0] + 1); }
 
 static int tier_of(const char* level) {
+    // FTL's files write these in any case ("low", "MED", "MEDIUM").
     if (!level) return 1;
-    if (!strcmp(level, "LOW")) return 0;
-    if (!strcmp(level, "HIGH")) return 2;
-    if (!strcmp(level, "RANDOM")) return rand() % 3;
-    return 1;  // MED
+    if (!strcasecmp(level, "LOW")) return 0;
+    if (!strcasecmp(level, "HIGH")) return 2;
+    if (!strcasecmp(level, "RANDOM")) return rand() % 3;
+    return 1;  // MED, MEDIUM
 }
 
 // Scrap is paid as if a sector later on easy and a sector earlier on hard (Mike Hopley's reward
@@ -720,6 +731,51 @@ static bool requirement_met(const Run* run, const RunCtx* ctx, const XNode* choi
     return have >= lvl && have <= maxLvl;
 }
 
+// <boarders min max class breach>: hostile crew beam aboard our ship, all into one room (a random
+// one with space), as intruders: they fight our crew and sabotage systems like any boarders.
+// "ghost" crew have no art of their own in ftl.dat: they're drawn as humans.
+static int add_boarders(RunCtx* ctx, const XNode* n) {
+    CrewSet* cs = ctx->crew;
+    Ship* s = ctx->ship;
+    int mn = xattr_int(n, "min", 1), mx = xattr_int(n, "max", mn);
+    int count = mn + (mx > mn ? rand() % (mx - mn + 1) : 0);
+    const char* cls = xattr(n, "class");
+    if (!cls || !strcmp(cls, "ghost")) cls = cls ? "human" : "random";
+    const char* breach = xattr(n, "breach");
+    if (s->roomCount == 0) return 0;
+    int start = rand() % s->roomCount, added = 0;
+    for (int k = 0; k < s->roomCount && added < count; k++) {
+        int r = (start + k) % s->roomCount;
+        const Room* rm = &s->rooms[r];
+        int here = 0;
+        for (int y = rm->y; y < rm->y + rm->h && added < count; y++)
+            for (int x = rm->x; x < rm->x + rm->w && added < count; x++) {
+                bool used = false;
+                for (int i = 0; i < cs->count && !used; i++) used = cs->crew[i].foreign && cs->crew[i].destX == x && cs->crew[i].destY == y;
+                if (used || cs->count >= MAX_CREW) continue;
+                const char* race = cls;
+                if (!strcmp(race, "random")) {
+                    static const char* const races[] = {"human", "engi", "mantis", "rock", "energy", "slug"};
+                    race = races[rand() % 6];
+                }
+                if (!strcmp(race, "zoltan")) race = "energy";
+                if (!strcmp(race, "lanius")) race = "anaerobic";
+                bool female = !strcmp(race, "human") && (rand() & 1);
+                int ri = crew_race_look(cs, race, female ? "female" : race);
+                if (ri < 0) ri = crew_race(cs, race);
+                if (ri < 0) continue;
+                const char* nm = race;
+                if (ctx->names && ctx->names->count) nm = ctx->names->names[rand() % ctx->names->count];
+                if (!crew_add(cs, ri, nm, female, x, y)) continue;
+                cs->crew[cs->count - 1].foreign = true;
+                added++;
+                here++;
+            }
+        if (here && breach && !strcmp(breach, "true")) life_breach(s, r);
+    }
+    return added;
+}
+
 static void add_crew(RunCtx* ctx, const char* race, const char* name) {
     if (!race || !strcmp(race, "random") || !strcmp(race, "traitor")) {
         static const char* const races[] = {"human", "engi", "mantis", "rock", "energy", "slug"};
@@ -855,12 +911,20 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
                     if (s->systems[si].damage > s->systems[si].def->level) s->systems[si].damage = s->systems[si].def->level;
                     s->systems[si].repair = 0.0f;
                 }
+                // effect="fire" (two fires), "breach", "all" (both: xftl) or "random" (one or the
+                // other: our reading).
                 const char* effect = xattr(n, "effect");
-                if (effect && !strcmp(effect, "fire")) {
+                bool fire = effect && (!strcmp(effect, "fire") || !strcmp(effect, "all"));
+                bool breach = effect && (!strcmp(effect, "breach") || !strcmp(effect, "all"));
+                if (effect && !strcmp(effect, "random")) {
+                    if (rand() & 1) fire = true;
+                    else breach = true;
+                }
+                if (fire) {
                     life_ignite(s, room);
                     life_ignite(s, room);
                 }
-                if (effect && !strcmp(effect, "breach")) life_breach(s, room);
+                if (breach) life_breach(s, room);
             }
         } else if (!strcmp(n->name, "crewMember")) {
             int amount = xattr_int(n, "amount", 1);
@@ -881,13 +945,19 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
                 }
             }
         } else if (!strcmp(n->name, "removeCrew")) {
-            // A random crew member is lost (never the last). With <clone>true</clone> a clone bay
-            // brings them back, and the event's own text inside says so.
+            // A random crew member is lost (never the last), or one of a race (class="engi"). With
+            // <clone>true</clone> a clone bay brings them back, and the event's own text says so.
             CrewSet* cs = ctx->crew;
-            int native[MAX_CREW], cnt = 0;
-            for (int i = 0; i < cs->count; i++)
-                if (!cs->crew[i].foreign && !cs->crew[i].drone) native[cnt++] = i;
-            if (cnt > 1) {
+            const char* cls = xattr(n, "class");
+            if (cls && !strcmp(cls, "zoltan")) cls = "energy";
+            if (cls && !strcmp(cls, "lanius")) cls = "anaerobic";
+            int native[MAX_CREW], cnt = 0, total = 0;
+            for (int i = 0; i < cs->count; i++) {
+                if (cs->crew[i].foreign || cs->crew[i].drone) continue;
+                total++;
+                if (!cls || !strcmp(cs->races[cs->crew[i].race].name, cls)) native[cnt++] = i;
+            }
+            if (cnt > 0 && total > 1) {
                 int i = native[rand() % cnt];
                 const XNode* cl = xchild(n, "clone");
                 bool clone = cl && !strcmp(cl->text, "true") && ship_find_system(s, SYS_CLONEBAY) >= 0 && cs->cloneCount < MAX_CREW;
@@ -909,11 +979,32 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
             // A ship appears (load=...) and may turn hostile later in the event.
             if (xattr(n, "load")) sShipDef = find_named(sShips, sShipCount, xattr(n, "load"));
             const char* hostile = xattr(n, "hostile");
-            if (hostile && !strcmp(hostile, "true")) {
+            if (hostile && !strcasecmp(hostile, "true")) {
                 v->ship = n;
                 v->shipDef = sShipDef;
             }
-            if (hostile && !strcmp(hostile, "false") && !xattr(n, "load")) v->peace = true;
+            if (hostile && !strcasecmp(hostile, "false") && !xattr(n, "load")) v->peace = true;
+        } else if (!strcmp(n->name, "boarders")) {
+            int got = add_boarders(ctx, n);
+            if (got) snprintf(g.note, sizeof(g.note), "%d intruder%s on board!", got, got == 1 ? "" : "s");
+        } else if (!strcmp(n->name, "status")) {
+            // System limits at this beacon (xftl EventStatus): ours now, the enemy's when it's here.
+            static const char* const ops[] = {"limit", "divide", "loss", "clear"};
+            const char* type = xattr(n, "type");
+            const char* sysName = xattr(n, "system");
+            const char* target = xattr(n, "target");
+            int op = -1;
+            for (int k = 0; type && k < 4; k++)
+                if (!strcmp(type, ops[k])) op = k;
+            int sysType = sysName ? system_from_name(!strcmp(sysName, "engine") ? "engines" : sysName) : -1;
+            int amount = xattr_int(n, "amount", 0);
+            if (op >= 0 && sysType >= 0) {
+                if (target && !strcmp(target, "enemy")) {
+                    if (sEnemyStatusCount < 8) sEnemyStatus[sEnemyStatusCount++] = (EnemyStatus){sysType, op, amount};
+                } else {
+                    ship_event_status(s, sysType, op, amount);
+                }
+            }
         } else if (!strcmp(n->name, "img")) {
             run_backdrop(run, xattr(n, "back"), xattr(n, "planet"));
         } else if (!strcmp(n->name, "store")) {
@@ -1036,11 +1127,17 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
     if (v->store) run_store_enter(run, ctx);
 
     // Choices, skipping blue options we don't qualify for.
+    // FTL (xftl Choice): a choice whose requirement we don't meet is hidden if it's hidden="true",
+    // else shown greyed out; hidden="true" also keeps its rewards off the choice's text.
     int groupsShown[8], groupCount = 0;  // max_group: one choice per group
+    bool reqLocked[MAX_CHOICES] = {false};
     for (const XNode* c = ev->child; c && v->choiceCount < MAX_CHOICES; c = c->next) {
         if (strcmp(c->name, "choice")) continue;
         const char* req = xattr(c, "req");
-        if (!requirement_met(run, ctx, c)) continue;
+        const char* hiddenAttr = xattr(c, "hidden");
+        bool hidden = hiddenAttr && !strcasecmp(hiddenAttr, "true");
+        bool met = requirement_met(run, ctx, c);
+        if (!met && hidden) continue;
         if (xattr(c, "max_group")) {
             int grp = xattr_int(c, "max_group", 0);
             bool seen = false;
@@ -1052,7 +1149,11 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
         snprintf(v->choiceText[i], sizeof(v->choiceText[i]), "%s", resolve_text(xchild(c, "text")));
         if (!v->choiceText[i][0]) snprintf(v->choiceText[i], sizeof(v->choiceText[i]), "Continue...");
         const char* blue = xattr(c, "blue");
-        v->choiceBlue[i] = req != NULL && !(blue && !strcmp(blue, "false"));
+        v->choiceBlue[i] = met && req != NULL && !(blue && !strcmp(blue, "false"));
+        if (!met) {
+            v->choiceDisabled[i] = true;
+            reqLocked[i] = true;
+        }
         static const char* const races[] = {"human", "engi", "mantis", "rock", "zoltan", "energy", "slug", "crystal", "lanius", "anaerobic"};
         for (size_t k = 0; req && k < sizeof(races) / sizeof(races[0]); k++) v->choiceCrew[i] |= !strcmp(req, races[k]);
         // Like FTL, the outcome is picked now (a random event from a list, its resource amounts)
@@ -1073,16 +1174,22 @@ static void show_event_with(Run* run, RunCtx* ctx, const XNode* ev, const int* f
                 append(preview, sizeof(preview), part);
                 if (a < 0 && have[k] < -a) v->choiceDisabled[i] = true;
             }
-            if (preview[0]) {
+            if (preview[0] && !hidden) {
                 char line[120];
                 snprintf(line, sizeof(line), " [%s]", preview);
                 append(v->choiceText[i], sizeof(v->choiceText[i]), line);
             }
         }
     }
-    // Never leave a dialog with nothing to pick: if every choice costs too much, the last opens up.
+    // Never leave a dialog with nothing to pick: if every choice costs too much, the last one we
+    // qualify for opens up.
     bool anyOpen = false;
     for (int i = 0; i < v->choiceCount; i++) anyOpen |= !v->choiceDisabled[i];
+    for (int i = v->choiceCount - 1; i >= 0 && !anyOpen; i--)
+        if (!reqLocked[i]) {
+            v->choiceDisabled[i] = false;
+            anyOpen = true;
+        }
     if (v->choiceCount > 0 && !anyOpen) v->choiceDisabled[v->choiceCount - 1] = false;
     if (v->choiceCount == 0) {
         // FTL opens no window for an event with nothing to say (e.g. one that only brings a
@@ -1653,6 +1760,7 @@ static void arrive(Run* run, RunCtx* ctx) {
     }
     b->visited = true;
     sShipDef = NULL;
+    sEnemyStatusCount = 0;
     run_backdrop(run, "BACKGROUND", "PLANET");
     memset(&run->view, 0, sizeof(run->view));
     if (run->lastStand && run->flagStage <= 3 && run->current == run->flagBeacon) {

@@ -650,6 +650,7 @@ int ship_install_system(Ship* s, FtlDat* dat, const SystemDef* src) {
 
         sys->stationX = sys->stationY = -1;
         sys->ionLimit = -1;
+        sys->eventCap = -1;
         const Room* room = &s->rooms[sys->room];
         if (d->slot >= 0 && d->slot < room->w * room->h) {
             sys->stationX = room->x + d->slot % room->w;
@@ -791,7 +792,27 @@ int ship_system_capacity(const Ship* s, int sys) {
     const ShipSystem* y = &s->systems[sys];
     int c = y->def->level - y->damage;
     if (y->ionLimit >= 0 && y->ionLimit < c) c = y->ionLimit;
+    if (y->eventCap >= 0 && y->eventCap < c) c = y->eventCap;
     return c > 0 ? c : 0;
+}
+
+void ship_event_status(Ship* s, int sysType, int op, int amount) {
+    int si = ship_find_system(s, sysType);
+    if (si < 0) return;
+    ShipSystem* y = &s->systems[si];
+    int level = y->def->level;
+    switch (op) {
+        case EVSTAT_LIMIT: y->eventCap = amount; break;
+        case EVSTAT_DIVIDE: y->eventCap = amount > 0 ? level / amount : level; break;
+        case EVSTAT_LOSS: y->eventCap = level - amount; break;
+        default: y->eventCap = -1; break;
+    }
+    if (y->eventCap < -1) y->eventCap = 0;
+    if (y->eventCap >= 0 && y->power > y->eventCap) y->power = y->eventCap;  // what no longer fits goes off
+}
+
+void ship_clear_event_status(Ship* s) {
+    for (int i = 0; i < s->systemCount; i++) s->systems[i].eventCap = -1;
 }
 
 void ship_set_power(Ship* s, int sys, int power) {

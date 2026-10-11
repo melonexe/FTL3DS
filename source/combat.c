@@ -594,6 +594,7 @@ static void room_point(const Ship* s, int room, float* x, float* y) {
 static int crew_owned_by(const Combat* c, int owner);
 
 void combat_jump_reset(Ship* player, CrewSet* playerCrew) {
+    ship_clear_event_status(player);  // the last beacon's system limits (<status>)
     player->superShield = player->superShieldMax = player->aug[AUG_ENERGY_SHIELD] ? 5 : 0;
     memset(player->lockdown, 0, sizeof(player->lockdown));
     for (int i = 0; i < playerCrew->count; i++) playerCrew->crew[i].ability = 0.0f;  // the lockdown is ready again

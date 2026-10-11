@@ -871,6 +871,10 @@ static void draw_text(float x, float y, float scale, u32 color, const char* str)
 // Text that must fit in maxW: a smaller font first, then squeezed.
 static void draw_text_fit_left(float x, float y, float scale, float maxW, u32 color, const char* str) {
     float w = font_width(scale, str);
+    if (w > maxW && scale >= 0.5f && font_width(0.45f, str) <= maxW) {
+        font_draw(x, y + text_nudge(scale) + 1, 0.45f, color, str, 1.0f);
+        return;
+    }
     if (w > maxW && scale >= 0.42f && font_width(0.4f, str) <= maxW) {
         font_draw(x, y + text_nudge(scale) + 1, 0.4f, color, str, 1.0f);
         return;
@@ -2903,6 +2907,33 @@ static bool map_next_to_seen(const Run* r, int i) {
     return false;
 }
 
+// Map labels and the ring round their beacon share a colour, so it's clear which beacon a label
+// belongs to.
+#define MAPC_EXIT C2D_Color32(120, 255, 140, 255)
+#define MAPC_STORE C2D_Color32(255, 220, 120, 255)
+#define MAPC_QUEST C2D_Color32(120, 200, 255, 255)
+#define MAPC_DISTRESS C2D_Color32(255, 140, 110, 255)
+#define MAPC_SHIP C2D_Color32(255, 90, 80, 255)
+#define MAPC_HAZARD C2D_Color32(255, 180, 60, 255)
+
+static void map_ring(float x, float y, float rad, u32 col) {
+    const int n = 20;
+    for (int k = 0; k < n; k++) {
+        float a0 = k * 2.0f * (float)M_PI / n, a1 = (k + 1) * 2.0f * (float)M_PI / n;
+        C2D_DrawLine(x + cosf(a0) * rad, y + sinf(a0) * rad, col, x + cosf(a1) * rad, y + sinf(a1) * rad, col, 1.6f, 0);
+    }
+}
+
+// A label's box: dark, with a 1px border in its colour.
+static void map_label(float lx, float ly, float lw, float lh, float scale, u32 col, const char* text) {
+    C2D_DrawRectSolid(lx, ly, 0, lw, lh, C2D_Color32(20, 26, 36, 230));
+    C2D_DrawRectSolid(lx, ly, 0, lw, 1, col);
+    C2D_DrawRectSolid(lx, ly + lh - 1, 0, lw, 1, col);
+    C2D_DrawRectSolid(lx, ly, 0, 1, lh, col);
+    C2D_DrawRectSolid(lx + lw - 1, ly, 0, 1, lh, col);
+    draw_text(lx + 2, ly - 1, scale, col, text);
+}
+
 static void draw_run_map(const Run* r) {
     map_art_load();
     const u32 white = C2D_Color32(235, 235, 235, 255);
@@ -2963,14 +2994,15 @@ static void draw_run_map(const Run* r) {
             }
         int scanEnv;
         bool scanShip;
+        u32 scanCol = 0;
         if (run_has_aug(r, "ADV_SCANNERS") && map_next_to_seen(r, i) && run_beacon_scan(r, i, &scanEnv, &scanShip)) {
             static const char* const envTag[] = {"", "NEBULA", "STORM", "ASTEROIDS", "SUN", "PULSAR", "ASB"};
             char scan[24];
             snprintf(scan, sizeof(scan), "%s%s%s", scanShip ? "SHIP" : "", scanShip && scanEnv ? " " : "", envTag[scanEnv]);
             if (scan[0]) {
+                scanCol = scanShip ? MAPC_SHIP : MAPC_HAZARD;
                 float lw = font_width(0.32f, scan) + 4, lx = x - lw * 0.5f;
-                C2D_DrawRectSolid(lx, y + 8, 0, lw, 10, C2D_Color32(20, 26, 36, 220));
-                draw_text(lx + 2, y + 7, 0.32f, scanShip ? C2D_Color32(255, 120, 100, 255) : C2D_Color32(255, 200, 90, 255), scan);
+                map_label(lx, y + 9, lw, 10, 0.32f, scanCol, scan);
             }
         }
         // What FTL marks (wiki: Beacon): the exit always; quests from any distance; stores and
@@ -2983,16 +3015,16 @@ static void draw_run_map(const Run* r) {
                           : near && run_beacon_distress(r, i)       ? "DISTRESS"
                                                                     : NULL;
         if (tag) {
-            u32 tc = b->exit                   ? C2D_Color32(120, 255, 140, 255)
-                     : store                   ? C2D_Color32(255, 220, 120, 255)
-                     : b->quest && !b->visited ? C2D_Color32(120, 200, 255, 255)
-                                               : C2D_Color32(255, 140, 110, 255);
+            u32 tc = b->exit ? MAPC_EXIT : store ? MAPC_STORE : b->quest && !b->visited ? MAPC_QUEST : MAPC_DISTRESS;
+            map_ring(x, y, 8.5f, tc);
+            if (scanCol) map_ring(x, y, 11.0f, scanCol);  // a scan label too: a second ring outside
             // Right of the beacon, or left of it if that would run past the map's edge.
-            float lw = font_width(0.36f, tag) + 4, lx = x + 6;
+            float lw = font_width(0.36f, tag) + 4, lx = x + 9;
             float mapRight = RMAP_X + 660 * RMAP_S;
-            if (lx + lw > mapRight) lx = x - 6 - lw;
-            C2D_DrawRectSolid(lx, y - 13, 0, lw, 11, C2D_Color32(20, 26, 36, 220));
-            draw_text(lx + 2, y - 14, 0.36f, tc, tag);
+            if (lx + lw > mapRight) lx = x - 9 - lw;
+            map_label(lx, y - 14, lw, 11, 0.36f, tc, tag);
+        } else if (scanCol) {
+            map_ring(x, y, 8.5f, scanCol);
         }
     }
     if (r->lastStand && r->flagStage <= 3) {
@@ -3305,7 +3337,49 @@ static const char* store_tab_name(const Run* r, int i) {
     return i == 0 ? "SUPPLY" : i <= r->storeSectionCount ? KIND_TAB[r->storeKind[i - 1]] : "SELL";
 }
 
-#define SELL_ROW_H 21
+// Text in a w x h box at the biggest of `scale`, the body font and the small font that fits, on one
+// line or (below the title font) wrapped onto two (spaced closer than the fonts' own line spacing, so two lines fit small
+// boxes). Squeezed onto one line only if nothing else fits. Centred vertically, and horizontally
+// if `centre`.
+static void draw_text_box(float x, float y, float w, float h, float scale, u32 color, const char* str, bool centre) {
+    const float scales[3] = {scale, 0.45f, 0.4f};
+    for (int i = 0; i < 3; i++) {
+        float sc = scales[i];
+        if (i > 0 && sc >= scales[i - 1]) continue;
+        float cap = font_cap_height(sc), step = cap + 3;
+        for (int lines = 1; lines <= (sc >= 0.5f ? 1 : 2); lines++) {  // the title font doesn't wrap
+            char buf[128];
+            if (lines == 1)
+                snprintf(buf, sizeof(buf), "%s", str);
+            else if (wrap_text(str, sc, w, buf, sizeof(buf)) != 2)
+                continue;
+            float th = (lines - 1) * step + cap + 2;  // + room for descenders
+            if (font_width(sc, buf) > w || th > h) continue;
+            float ty = y + floorf((h - th) * 0.5f);
+            for (char* line = buf; line;) {
+                char* nl = strchr(line, '\n');
+                if (nl) *nl = '\0';
+                font_draw(centre ? floorf(x + (w - font_width(sc, line)) * 0.5f) : x, ty, sc, color, line, 1.0f);
+                ty += step;
+                line = nl ? nl + 1 : NULL;
+            }
+            return;
+        }
+    }
+    float tw = font_width(0.4f, str);
+    font_draw(x, y + floorf((h - font_cap_height(0.4f)) * 0.5f), 0.4f, color, str, tw > w ? w / tw : 1.0f);
+}
+
+// Sell rows: one full-width column while they fit, else two columns of taller rows (room for a
+// name wrapped onto two lines).
+#define SELL_ONE_COLUMN 8
+static void sell_row(int n, int i, float* x, float* y, float* w, float* h) {
+    int cols = n > SELL_ONE_COLUMN ? 2 : 1;
+    *w = cols == 1 ? BOT_W - 8 : 155;
+    *h = cols == 1 ? 21 : 25;
+    *x = 4 + (i % cols) * 157;
+    *y = SHOP_TOP + (i / cols) * (*h + 2);
+}
 
 static void draw_store(const Run* r, const Ship* s) {
     const u32 white = C2D_Color32(235, 235, 235, 255), dim = C2D_Color32(160, 170, 185, 255);
@@ -3350,7 +3424,7 @@ static void draw_store(const Run* r, const Ship* s) {
             // Picture on the left, in a dark well.
             C2D_DrawRectSolid(10, y + 6, 0, 66, 48, C2D_Color32(14, 18, 26, 255));
             draw_item_art(item_art(r->storeKind[sec], name), 10, y + 6, 66, 48);
-            draw_text_fit_left(84, y + 8, 0.52f, BOT_W - 184, white, title);
+            draw_text_box(84, y + 3, BOT_W - 96 - 84, 29, 0.52f, white, title, false);
             if (r->storeKind[sec] == ITEM_CREW && r->storeSkill[sec][k][0]) {
                 // Trained: each skill's icon in its level's colour.
                 for (int j = 0; j < 2; j++) {
@@ -3365,7 +3439,7 @@ static void draw_store(const Run* r, const Ship* s) {
                            : t == SYS_MEDBAY && ship_find_system(s, SYS_CLONEBAY) >= 0 ? "replaces the clone bay"
                                                                                        : "installs in its room";
                 }
-                draw_text(84, y + 32, 0.4f, dim, note);
+                draw_text(84, y + 36, 0.4f, dim, note);
             }
             int price = run_store_price(r, sec, k);
             snprintf(buf, sizeof(buf), "BUY  %d", price);
@@ -3376,11 +3450,12 @@ static void draw_store(const Run* r, const Ship* s) {
         int n = sellables(r, s, items);
         if (!n) draw_text(10, SHOP_TOP + 6, 0.45f, dim, "Nothing to sell.");
         for (int i = 0; i < n; i++) {
-            float x = 4 + (i % 2) * 157, y = SHOP_TOP + (i / 2) * (SELL_ROW_H + 2);
-            ftl_box(x, y, 155, SELL_ROW_H, UI_BODY);
-            draw_text_fit_left(x + 7, y + 4, 0.38f, 92, white, item_title_of(items[i].name));
+            float x, y, w, h;
+            sell_row(n, i, &x, &y, &w, &h);
+            ftl_box(x, y, w, h, UI_BODY);
+            draw_text_box(x + 7, y + 2, w - 68, h - 4, 0.45f, white, item_title_of(items[i].name), false);
             snprintf(buf, sizeof(buf), "SELL %d", sell_price(items[i].name));
-            ftl_button(x + 101, y + 2, 51, SELL_ROW_H - 4, true, buf);
+            ftl_button(x + w - 56, y + 2, 53, h - 4, true, buf);
         }
     }
 }
@@ -3408,9 +3483,12 @@ static int store_touch(const Run* r, const Ship* s, float px, float py) {
     }
     Sellable items[16];
     int n = sellables(r, s, items);
-    int i = (int)((py - SHOP_TOP) / (SELL_ROW_H + 2)) * 2 + (px >= 4 + 157 ? 1 : 0);
-    float x = 4 + (i % 2) * 157;
-    if (i < n && px >= x + 101) return ST_SELL + i;
+    float x, y, w, h;
+    sell_row(n, 0, &x, &y, &w, &h);
+    int cols = n > SELL_ONE_COLUMN ? 2 : 1;
+    int i = (int)((py - SHOP_TOP) / (h + 2)) * cols + (cols == 2 && px >= 4 + 157 ? 1 : 0);
+    sell_row(n, i, &x, &y, &w, &h);
+    if (i < n && px >= x + w - 58) return ST_SELL + i;
     if (i < n) set_info_item(items[i].name);
     return ST_NONE;
 }
@@ -3523,23 +3601,12 @@ static void draw_equipment(const Run* r, const Ship* s) {
             ftl_box(x, y + 12, EQ_CELL_W, 31, sel ? C2D_Color32(90, 80, 30, 255) : UI_BODY);
             const char* name = equip_name(r, s, row, col);
             if (name[0]) {
-                // Weapons and drones use FTL's short names (e.g. "Burst II") on one line;
-                // augments have only full titles, so those wrap.
+                // Weapons and drones use FTL's short names (e.g. "Burst II"); augments have only
+                // full titles. Either wraps onto two lines if it must.
                 const WeaponDef* w = weapon_find(name);
                 const DroneDef* dr = w ? NULL : drone_find(name);
                 const char* shortName = w && w->shortName[0] ? w->shortName : dr && dr->shortName[0] ? dr->shortName : NULL;
-                if (shortName) {
-                    draw_text_centred(x + 3, y + 20, EQ_CELL_W - 6, 0.45f, white, shortName);
-                } else {
-                    static char wrapped[80];
-                    float sc = 0.4f;
-                    int lines = wrap_text(item_title_of(name), sc, EQ_CELL_W - 10, wrapped, sizeof(wrapped));
-                    if (lines > 2) {
-                        sc = 0.34f;
-                        lines = wrap_text(item_title_of(name), sc, EQ_CELL_W - 10, wrapped, sizeof(wrapped));
-                    }
-                    draw_text(x + 5, y + (lines > 1 ? 14 : 20), sc, white, wrapped);
-                }
+                draw_text_box(x + 4, y + 14, EQ_CELL_W - 8, 27, 0.45f, white, shortName ? shortName : item_title_of(name), true);
             }
         }
     }
@@ -6171,6 +6238,11 @@ int main(void) {
         if (ship->cloakTime > 0.0f) ship_load_cloak(ship);
         if (foe && foe->cloakTime > 0.0f) ship_load_cloak(foe);
 
+        if (sInRun && foe) {  // the event's limits on the enemy's systems (<status target="enemy">)
+            EnemyStatus es[8];
+            int n = run_take_enemy_status(es, 8);
+            for (int k = 0; k < n; k++) ship_event_status(foe, es[k].sys, es[k].op, es[k].amount);
+        }
         // The ship in the enemy panel: the one we're fighting, or a visitor.
         Ship* shown = foe ? foe : sVisitor && enemy.loaded ? &enemy.ships[enemy.cur] : NULL;
         CrewSet* shownCrew = foe ? foeCrew : shown ? &enemy.crews[enemy.cur] : NULL;

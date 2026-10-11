@@ -130,6 +130,7 @@ typedef struct {
     float sabotage;             // boarder damage (0..1) towards breaking the next bar
     int zoltan;                 // free power from Zoltan crew standing in the room
     int ionLimit;               // most power allowed while ionised, -1 when not
+    int eventCap;               // most power a beacon event allows (<status>), -1 when none
     int targetPower;            // power the player (or AI) asked for, restored after damage/ion
 } ShipSystem;
 
@@ -271,6 +272,13 @@ int ship_list_blueprints(FtlDat* dat, ShipBlueprint* out, int max);
 
 // FTL's enemy generation (xftl ShipGenerator, normal difficulty): crew, optional systems and
 // system power grow with the sector (0-based). Writes a copy of `base` to `out`.
+// A beacon event's <status> on one of a ship's systems (xftl EventStatus): LIMIT caps its power at
+// `amount`, DIVIDE at its level / amount, LOSS at its level - amount; CLEAR lifts it. It lasts until
+// the next jump (ship_clear_event_status).
+enum { EVSTAT_LIMIT, EVSTAT_DIVIDE, EVSTAT_LOSS, EVSTAT_CLEAR };
+void ship_event_status(Ship* s, int sysType, int op, int amount);
+void ship_clear_event_status(Ship* s);
+
 void ship_generate_enemy(ShipBlueprint* out, const ShipBlueprint* base, int sector, int difficulty);
 
 // Collects regular enemy ships from data/autoBlueprints.xml (no bosses or special ships).

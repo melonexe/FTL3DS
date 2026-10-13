@@ -1,4 +1,8 @@
-# Crew skills: one point short of level 1; the first dodges level pilot and engines.
+# Crew skills: one point short of level 1, so the first dodge levels pilot and engines. The first
+# shot at us is made to miss (do evade 1: a real dodge, through the game's own miss path); waiting
+# for a natural one was luck (20% evasion, and the enemy can knock out the pilot or engines, or kill
+# the crew manning them). skillmax_ is the best level reached, so a crew member lost after
+# levelling doesn't fail it.
 ship 1
 enemy REBEL_FAT
 skills 0
@@ -6,10 +10,12 @@ tab crew
 seed 9
 at 1 expect skill_pilot == 0
 at 1 expect evasion == 20
+at 1 do evade 1
 at 1 do select 1
 at 2 shot skills_panel
 at 30 log state
-at 30 expect skill_pilot >= 1
-at 30 expect skill_engines >= 1
+at 30 expect dodges >= 1
+at 30 expect skillmax_pilot >= 1
+at 30 expect skillmax_engines >= 1
 at 30 shot after
 at 31 done

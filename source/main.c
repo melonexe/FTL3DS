@@ -2182,6 +2182,7 @@ static float sTestFrameTime = 1 / 60.0f;  // seconds a frame, averaged over abou
 static bool sTestQuit;
 static const Ship* sTestFoeSeen;              // the enemy whose hull loss is being added up
 static int sTestFoeHullLast, sTestFoeHullLost;  // its hull last frame; all the hull it's lost (repairs don't undo it)
+static int sTestSkillMax[SKILL_COUNT];          // the best level our crew have reached in each skill (deaths don't undo it)
 static u32 sTestKeys;                 // buttons a scenario presses next frame
 static bool sTestTap, sTestTapNow;    // a scenario's touch: pending, and this frame's
 static u16 sTestTapX, sTestTapY;
@@ -6270,6 +6271,11 @@ int main(void) {
             sTestFoeHullLost += sTestFoeHullLast - foe->hullHp;
         }
         sTestFoeHullLast = foe ? foe->hullHp : 0;
+        for (int i = 0; i < crew->count; i++)
+            for (int k = 0; k < SKILL_COUNT; k++) {
+                int l = crew_skill_level(crew, &crew->crew[i], k);
+                if (!crew->crew[i].foreign && l > sTestSkillMax[k]) sTestSkillMax[k] = l;
+            }
 #endif
         check_achievements(&combat, ship, crew, foe, foeCrew);
         popup_update(dt, blueprints, bpCount);

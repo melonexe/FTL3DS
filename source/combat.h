@@ -201,6 +201,12 @@ const WeaponDef* combat_shot_def(const Combat* c, int from, int weapon, int dron
 // Chance (percent) that a shot at this ship misses.
 int combat_evasion(const Ship* ship);
 
+#ifdef FTL_TEST
+// Scenario tests: shots at our ship still to be forced to miss ("do evade N"), and how many have
+// missed us (dodges, through the game's own miss path).
+extern int gTestEvade, gTestDodges;
+#endif
+
 // Whether a side's FTL drive can charge (xftl Ship.canChargeFTL): engines powered, piloting not
 // broken, someone able in the piloting room (crewless auto-ships fly themselves), and neither
 // system under a hacking pulse. FTL also needs this to jump, in a fight or not.

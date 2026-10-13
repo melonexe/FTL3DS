@@ -494,6 +494,10 @@ static void manning_xp(Combat* c, int side, int sysType, int skill) {
 
 static const Combat* sCombat;  // for evasion queries from the UI
 
+#ifdef FTL_TEST
+int gTestEvade, gTestDodges;
+#endif
+
 static int evasion_base(const Combat* c, const Ship* s);
 
 static int evasion(const Combat* c, const Ship* s) {
@@ -995,6 +999,13 @@ static void resolve(Combat* c, Projectile* p) {
         if (!p->miss && now > p->evade && r < (now - p->evade) / (float)(100 - p->evade)) p->miss = true;
         else if (p->miss && now < p->evade && r < (p->evade - now) / (float)p->evade) p->miss = false;
     }
+#ifdef FTL_TEST
+    if (side == SIDE_PLAYER && !p->shotDown && gTestEvade > 0 && !p->miss) {  // "do evade N": the next N shots miss
+        p->miss = true;
+        gTestEvade--;
+    }
+    if (side == SIDE_PLAYER && !p->shotDown && p->miss) gTestDodges++;
+#endif
     if (p->shotDown) {  // a defence drone got it
         add_effect(c, side, FX_EXPLOSION, p->tx, p->ty);
         return;

@@ -401,6 +401,13 @@ static void parse_layout_xml(Ship* s, const char* xml) {
         if (!xml_attr_int(tag, end, "x", &m->x) || !xml_attr_int(tag, end, "y", &m->y)) continue;
         m->rotate = xml_attr(tag, end, "rotate", buf, sizeof(buf)) && !strcmp(buf, "true");
         m->mirror = xml_attr(tag, end, "mirror", buf, sizeof(buf)) && !strcmp(buf, "true");
+        m->slideX = m->slideY = 0;
+        if (xml_attr(tag, end, "slide", buf, sizeof(buf))) {
+            if (!strcmp(buf, "up")) m->slideY = -1;
+            else if (!strcmp(buf, "down")) m->slideY = 1;
+            else if (!strcmp(buf, "left")) m->slideX = -1;
+            else if (!strcmp(buf, "right")) m->slideX = 1;
+        }
         s->mountCount++;
     }
     if ((tag = xml_find_tag(xml, "img", &end))) {

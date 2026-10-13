@@ -563,15 +563,19 @@ static void draw_mounted(const Ship* s, const Camera* cam, const WeaponSlot* w, 
         }
         float mx, my;
         combat_mount_point(s, i, &mx, &my);
-        // Offset from the mount point to the frame centre, mirrored and rotated like the sprite.
+        // An unpowered weapon sits 12 px back into the hull, along its mount's slide direction, and
+        // slides out when powered (xftl Weapons.drawBackground).
+        float back = roundf(12.0f * (w->slide - 1.0f));
+        mx += m->slideX * back;
+        my += m->slideY * back;
+        // Offset from the mount point to the frame centre, mirrored and rotated like the sprite (all
+        // in ship space, so a turned camera turns it too).
         float dx = w->artFw * 0.5f - w->mountPx, dy = w->artFh * 0.5f - w->mountPy;
         if (m->mirror) dx = -dx;
-        float angle = m->rotate ? (float)M_PI_2 : 0.0f;
+        float angle = (m->rotate ? (float)M_PI_2 : 0.0f) + cam_angle(cam);
         float rx = m->rotate ? -dy : dx, ry = m->rotate ? dx : dy;
         float cx, cy;
-        to_screen(cam, mx, my, &cx, &cy);
-        cx += rx * cam->zoom;
-        cy += ry * cam->zoom;
+        to_screen(cam, mx + rx, my + ry, &cx, &cy);
         Tex3DS_SubTexture sub = {
             .width = (u16)w->artFw,
             .height = (u16)w->artFh,

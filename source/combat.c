@@ -304,6 +304,7 @@ void combat_arm(Ship* s, FtlDat* dat, const AnimDb* db) {
         memset(w, 0, sizeof(*w));
         w->def = wd;
         w->target = -1;
+        w->slide = 1.0f;
         load_weapon_art(w, dat, db);
         s->artSys[s->artilleryCount++] = i;
     }
@@ -354,6 +355,7 @@ bool combat_add_weapon(Ship* s, FtlDat* dat, const AnimDb* db, const char* name)
     memset(w, 0, sizeof(*w));
     w->def = def;
     w->target = -1;
+    w->slide = 1.0f;  // shown out; an unpowered one slides in once the game runs
     load_weapon_art(w, dat, db);
     return true;
 }
@@ -1231,12 +1233,25 @@ static void update_shields(Combat* c, int side, float dt) {
     }
 }
 
+// Weapons slide out of the hull when powered and back in when not, in half a second (xftl
+// Weapons): drawing only. Artillery is out while its system has power.
+static void weapon_slides(Ship* s, float dt) {
+    for (int i = 0; i < s->weaponCount + s->artilleryCount; i++) {
+        WeaponSlot* w = i < s->weaponCount ? &s->weapons[i] : &s->artillery[i - s->weaponCount];
+        bool out = i < s->weaponCount ? w->powered : ship_artillery_time(s, i - s->weaponCount) > 0.0f;
+        w->slide += (out ? 2.0f : -2.0f) * dt;
+        if (w->slide < 0.0f) w->slide = 0.0f;
+        if (w->slide > 1.0f) w->slide = 1.0f;
+    }
+}
+
 static void update_ship(Combat* c, int side, float dt) {
     Ship* s = c->ship[side];
     Ship* o = c->ship[!side];
     int ci = ship_find_system(s, SYS_CLOAKING);
     update_systems(c, side, dt);
     update_shields(c, side, dt);
+    weapon_slides(s, dt);
 
     // Artillery charges by itself (no console to man) and fires unaimed: a beam sweeps a random
     // room, anything else sends its volley at one.
@@ -2992,6 +3007,8 @@ void combat_update(Combat* c, float dt) {
         }
         update_systems(c, SIDE_PLAYER, dt);
         update_shields(c, SIDE_PLAYER, dt);
+        for (int side = 0; side < 2; side++)
+            if (c->ship[side]) weapon_slides(c->ship[side], dt);
         update_environment(c, dt);  // asteroids, flares and the like don't need an enemy
         update_shots(c, dt);
         update_repairs(c, SIDE_PLAYER, dt);

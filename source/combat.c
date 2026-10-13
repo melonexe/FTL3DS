@@ -1498,8 +1498,172 @@ static int ai_target_room(const Combat* c) {
     return p->systems[si].room;
 }
 
-// The enemy keeps its weapons powered, picks a new player room for each volley, and sends a
-// crew member to fix damaged systems.
+// The enemy's power, re-planned from scratch on every AI tick as FTL does (xftl doc/ship-ai,
+// ShipAI::CheckPowerLevels): everything off that can be (ion-locked and hacked systems keep theirs);
+// a bar each for oxygen, teleporter and clone bay, and the medbay if its crew are hurt; then, round
+// and round until nothing more fits, one more weapon (the most charged, later ones on a tie, as in
+// FTL), one more drone, and a bar each for shields, cloaking and engines; then whatever is left, in
+// FTL's system order. So a halved reactor (an ion storm) or a damaged system shares what's left
+// between weapons and defences, and power moves to something else when a system loses it.
+static int drones_system(const Ship* s);
+static bool power_drone(Combat* c, int side, int i);
+
+typedef struct {
+    Ship* e;
+    int budget;                    // reactor bars not yet given out
+    int want[MAX_SYSTEMS];         // reactor bars per system (weapons and drones: see gun/drone)
+    bool gun[MAX_WEAPON_SLOTS], drone[MAX_WEAPON_SLOTS];
+    int gunPower, gunCap, dronePower, droneCap;
+    bool gunsLocked, dronesLocked;  // ionised or hacked: they keep what they have
+} AiPlan;
+
+static bool ai_locked(const Ship* e, int si) {
+    return si >= 0 && (e->systems[si].ionTimer > 0.0f || (e->hackPulse > 0.0f && e->hackedSys == si));
+}
+
+// One more reactor bar for system si, if it has room (Zoltan crew in it fill part of it for free).
+static bool ai_bar(AiPlan* p, int si) {
+    if (si < 0 || p->budget <= 0) return false;
+    const ShipSystem* y = &p->e->systems[si];
+    int t = y->def->type;
+    if (system_is_subsystem(t) || t == SYS_WEAPONS || t == SYS_DRONES || ai_locked(p->e, si)) return false;
+    if (p->want[si] + y->zoltan >= ship_system_capacity(p->e, si)) return false;
+    p->want[si]++;
+    p->budget--;
+    return true;
+}
+
+static bool ai_bar_type(AiPlan* p, int type) { return ai_bar(p, ship_find_system(p->e, type)); }
+
+// Powers the most charged weapon that's off and fits (ties go to the later one, as in FTL).
+static bool ai_gun(AiPlan* p) {
+    const Ship* e = p->e;
+    int best = -1;
+    for (int i = 0; !p->gunsLocked && i < e->weaponCount; i++) {
+        const WeaponSlot* w = &e->weapons[i];
+        if (p->gun[i] || !weapon_supported(w->def) || (w->def->missiles > 0 && e->missiles <= 0)) continue;
+        if (w->def->power > p->budget || p->gunPower + w->def->power > p->gunCap) continue;
+        if (best < 0 || w->charge >= e->weapons[best].charge) best = i;
+    }
+    if (best < 0) return false;
+    p->gun[best] = true;
+    p->gunPower += e->weapons[best].def->power;
+    p->budget -= e->weapons[best].def->power;
+    return true;
+}
+
+// Powers the first drone that's off, fits, and is out or can be launched.
+static bool ai_drone(AiPlan* p) {
+    const Ship* e = p->e;
+    for (int i = 0; !p->dronesLocked && i < e->droneCount; i++) {
+        const DroneSlot* d = &e->drones[i];
+        if (p->drone[i] || !drone_supported(d->def) || d->def->power > p->budget || p->dronePower + d->def->power > p->droneCap)
+            continue;
+        if (!d->deployed && (e->droneParts <= 0 || d->redeploy > 0.0f)) continue;
+        p->drone[i] = true;
+        p->dronePower += d->def->power;
+        p->budget -= d->def->power;
+        return true;
+    }
+    return false;
+}
+
+static void ai_power(Combat* c) {
+    Ship* e = c->ship[SIDE_ENEMY];
+    CrewSet* cs = c->crew[SIDE_ENEMY];
+    bool fight = !c->enemyEscaping;           // weapons and drones only while it means to fight
+    bool shoot = fight && !c->enemyHoldFire;  // (hold fire: tests)
+    int ws = weapons_system(e), ds = drones_system(e);
+    AiPlan p = {.e = e, .budget = e->reactor - e->reactorCut + e->batteryBonus};
+    p.gunsLocked = ai_locked(e, ws);
+    p.dronesLocked = ai_locked(e, ds);
+    p.gunCap = ws >= 0 ? ship_system_capacity(e, ws) : 0;
+    p.droneCap = ds >= 0 ? ship_system_capacity(e, ds) : 0;
+
+    // 1. Everything off where it can be: what's locked keeps its power, and its share of the reactor.
+    for (int i = 0; i < e->systemCount; i++) {
+        int t = e->systems[i].def->type;
+        if (system_is_subsystem(t) || t == SYS_WEAPONS || t == SYS_DRONES) continue;
+        p.want[i] = ai_locked(e, i) ? e->systems[i].power : 0;
+        p.budget -= p.want[i];
+    }
+    for (int i = 0; i < e->weaponCount; i++)
+        if ((p.gun[i] = p.gunsLocked && e->weapons[i].powered)) p.gunPower += e->weapons[i].def->power;
+    for (int i = 0; i < e->droneCount; i++)
+        if ((p.drone[i] = p.dronesLocked && e->drones[i].powered)) p.dronePower += e->drones[i].def->power;
+    p.budget -= p.gunPower + p.dronePower;
+
+    // 2. A bar each for life support and the crew systems (the medbay only for hurt crew).
+    ai_bar_type(&p, SYS_OXYGEN);
+    ai_bar_type(&p, SYS_TELEPORTER);
+    ai_bar_type(&p, SYS_CLONEBAY);
+    bool hurt = false;
+    for (int k = 0; k < cs->count && !hurt; k++)
+        hurt = !cs->crew[k].foreign && !cs->crew[k].drone && cs->crew[k].health < cs->races[cs->crew[k].race].maxHealth;
+    if (hurt) ai_bar_type(&p, SYS_MEDBAY);
+
+    // 3. Round and round: a weapon, a drone, a bar each for shields, cloaking and engines. As in
+    // FTL, a weapon alone doesn't keep the loop going.
+    for (int guard = 0; guard < 64; guard++) {
+        if (shoot) ai_gun(&p);
+        bool added = fight && ai_drone(&p);
+        added |= ai_bar_type(&p, SYS_SHIELDS);
+        added |= ai_bar_type(&p, SYS_CLOAKING);
+        added |= ai_bar_type(&p, SYS_ENGINES);
+        if (!added) break;
+    }
+
+    // 4. What's left, as much as each takes, in FTL's system order (every artillery system).
+    static const int ORDER[] = {SYS_SHIELDS, SYS_ENGINES, SYS_OXYGEN, SYS_WEAPONS, SYS_DRONES, SYS_MEDBAY, SYS_TELEPORTER,
+                                SYS_CLOAKING, SYS_ARTILLERY, SYS_CLONEBAY, SYS_MIND, SYS_HACKING};
+    for (size_t k = 0; k < sizeof(ORDER) / sizeof(ORDER[0]); k++) {
+        if (ORDER[k] == SYS_WEAPONS) {
+            while (shoot && ai_gun(&p)) {}
+        } else if (ORDER[k] == SYS_DRONES) {
+            while (fight && ai_drone(&p)) {}
+        } else {
+            for (int i = 0; i < e->systemCount; i++)
+                if (e->systems[i].def->type == ORDER[k])
+                    while (ai_bar(&p, i)) {}
+        }
+    }
+
+    // Apply: whatever goes down first, so what goes up finds the reactor free.
+    if (!p.gunsLocked) {
+        for (int i = 0; i < e->weaponCount; i++)
+            if (e->weapons[i].powered && !p.gun[i]) {
+                e->weapons[i].powered = e->weapons[i].wanted = false;
+                e->weapons[i].target = -1;
+            }
+        weapons_sync(e);
+    }
+    if (!p.dronesLocked) {
+        for (int i = 0; i < e->droneCount; i++)
+            if (e->drones[i].powered && !p.drone[i]) e->drones[i].powered = e->drones[i].wanted = false;
+        drones_sync(e);
+    }
+    for (int i = 0; i < e->systemCount; i++) {
+        ShipSystem* y = &e->systems[i];
+        int t = y->def->type;
+        if (system_is_subsystem(t) || t == SYS_WEAPONS || t == SYS_DRONES || ai_locked(e, i)) continue;
+        if (y->power > p.want[i]) y->power = p.want[i];
+        y->targetPower = p.want[i];  // what the restore after damage or ion aims for
+    }
+    for (int i = 0; i < e->systemCount; i++) {
+        ShipSystem* y = &e->systems[i];
+        int t = y->def->type;
+        if (system_is_subsystem(t) || t == SYS_WEAPONS || t == SYS_DRONES || ai_locked(e, i) || y->power >= p.want[i]) continue;
+        int add = p.want[i] - y->power, free = ship_reactor_free(e);
+        y->power += add < free ? add : free;
+    }
+    for (int i = 0; !p.gunsLocked && i < e->weaponCount; i++)
+        if (p.gun[i] && !e->weapons[i].powered && power_weapon(e, i)) e->weapons[i].wanted = true;
+    for (int i = 0; !p.dronesLocked && i < e->droneCount; i++)
+        if (p.drone[i] && !e->drones[i].powered && power_drone(c, SIDE_ENEMY, i)) e->drones[i].wanted = true;
+}
+
+// The enemy picks a new player room for each volley, plans its power (ai_power), and sends a crew
+// member to fix damaged systems.
 static void enemy_ai(Combat* c, float dt) {
     Ship* e = c->ship[SIDE_ENEMY];
     CrewSet* cs = c->crew[SIDE_ENEMY];
@@ -1516,20 +1680,7 @@ static void enemy_ai(Combat* c, float dt) {
     c->aiTimer = 1.0f;
     combat_cloak(c, SIDE_ENEMY);
     combat_battery(c, SIDE_ENEMY);
-    for (int i = 0; i < e->weaponCount; i++)
-        if (c->enemyHoldFire) {
-            e->weapons[i].powered = e->weapons[i].wanted = false;
-            weapons_sync(e);
-        } else if (!e->weapons[i].powered && !e->weapons[i].wanted) {
-            combat_toggle_weapon(e, i);
-        }
-    for (int i = 0; i < e->droneCount; i++)
-        if (!e->drones[i].powered && !e->drones[i].wanted) combat_toggle_drone(c, SIDE_ENEMY, i);
-    for (int si = 0; si < e->systemCount; si++) {
-        ShipSystem* y = &e->systems[si];
-        if (!system_is_subsystem(y->def->type) && y->def->type != SYS_WEAPONS && y->power < ship_system_capacity(e, si))
-            ship_set_power(e, si, ship_system_capacity(e, si));
-    }
+    ai_power(c);
     for (int room = 0; room < e->roomCount; room++) {
         int si = ship_system_in_room(e, room);
         bool work = life_room_fires(e, room) > 0 || life_room_breaches(e, room) > 0 || (si >= 0 && e->systems[si].damage > 0);

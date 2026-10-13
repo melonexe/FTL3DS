@@ -41,7 +41,8 @@
 //                                     enemyhulllost (hull the enemy has lost this fight, repairs or not),
 //                                     manned_<system> (1 if someone is at its station),
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
-//                                     dodges (shots that have missed our ship)
+//                                     dodges (shots that have missed our ship), enemyguns
+//                                     (enemy weapons powered)
 //   done                              log DONE and quit
 // Every frame, test/invariants.c also checks the rules the game state must always obey and logs
 // "ERROR invariant: ..." if one stays broken.
@@ -86,6 +87,11 @@
         if (!strcmp(n, "planetloadms")) return sPlanetJob.loadMs;
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
         if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
+        if (!strcmp(n, "enemyguns")) {  // enemy weapons powered
+            int k = 0;
+            for (int i = 0; es && i < es->weaponCount; i++) k += es->weapons[i].powered;
+            return es ? k : -1;
+        }
         if (!strcmp(n, "enemyhulllost")) return sTestFoeHullLost;  // hull the enemy has lost this fight, repairs or not
         if (!strcmp(n, "mapopen")) return sMapOpen;
         if (!strcmp(n, "paused")) return paused;

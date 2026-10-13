@@ -4973,6 +4973,7 @@ int main(void) {
     static Combat combat;
     char err[128] = "";
     bool opened = false;
+    bool startMusic = false;
 
     bool romfs = R_SUCCEEDED(romfsInit());  // fails harmlessly when there's no romfs (.3dsx builds)
     for (size_t i = 0; i < sizeof(DAT_PATHS) / sizeof(DAT_PATHS[0]) && !opened; i++)
@@ -4981,7 +4982,7 @@ int main(void) {
     bool runLoaded = false;
     if (opened) {
         animdb_open(&anims, &dat);
-        if (sound_init(&dat)) sound_music(sound_random_track());
+        startMusic = sound_init(&dat);  // played once the first menu frame is up, not over a black screen
         texture_low_memory = sound_free_idle;  // textures come first when linear memory runs out
         settings_load();
         sSaveExists = save_exists();
@@ -5523,6 +5524,10 @@ int main(void) {
             else if (sMenu == MENU_LOADOUT) draw_loadout();
             else draw_pause();
             C3D_FrameEnd(0);
+            if (startMusic) {  // the menu is on screen now
+                startMusic = false;
+                if (!sInRun) sound_music(sound_random_track());
+            }
             continue;
         }
 

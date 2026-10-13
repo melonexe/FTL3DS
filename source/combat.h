@@ -203,8 +203,11 @@ int combat_evasion(const Ship* ship);
 
 // Whether a side's FTL drive can charge (xftl Ship.canChargeFTL): engines powered, piloting not
 // broken, someone able in the piloting room (crewless auto-ships fly themselves), and neither
-// system under a hacking pulse.
+// system under a hacking pulse. FTL also needs this to jump, in a fight or not.
 bool combat_can_charge_ftl(const Combat* c, int side);
+// Why not, as one of these.
+enum { FTL_OK, FTL_NO_ENGINES, FTL_NO_PILOTING, FTL_NO_PILOT, FTL_HACKED };
+int combat_ftl_block(const Combat* c, int side);
 int combat_max_shields(const Ship* ship);
 // How far the next shield layer has charged, 0..1, or -1 when the shields are full.
 float combat_shield_progress(const Ship* ship);

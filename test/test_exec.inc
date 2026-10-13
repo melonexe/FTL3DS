@@ -71,6 +71,8 @@
         if (!strcmp(n, "bossstage")) return sBossStage;
         if (!strcmp(n, "env")) return sEnvNow;
         if (!strcmp(n, "ftl")) return sFtlCharge;
+        if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
+        if (!strcmp(n, "mapopen")) return sMapOpen;
         if (!strcmp(n, "paused")) return paused;
         if (!strcmp(n, "linearfree")) return linearSpaceFree() / 1048576.0;
         if (!strcmp(n, "soundmb") || !strcmp(n, "soundheapmb") || !strcmp(n, "sounds")) {  // decoded effects
@@ -104,6 +106,13 @@
         if (!strcmp(n, "preloaded")) return sPreloadFor != NULL;  // an enemy ship built during the last jump
         if (!strcmp(n, "fires")) return life_ship_fires(ps);
         if (!strcmp(n, "intruders")) return crew_foreign_count(PLAYER_CREW);
+        if (!strcmp(n, "opendoors") || !strcmp(n, "openairlocks")) {  // doors the player has opened
+            bool airlocks = n[4] == 'a';
+            int k = 0;
+            for (int i = 0; i < ps->doorCount; i++)
+                if (ps->doorState[i].forced && (ps->doors[i].roomA < 0 || ps->doors[i].roomB < 0) == airlocks) k++;
+            return k;
+        }
         if (!strncmp(n, "cap_", 4)) {  // a system's event limit (<status>): -1 none, -2 no such system
             int si = ship_find_system(ps, system_from_name(n + 4));
             return si >= 0 ? ps->systems[si].eventCap : -2;
@@ -292,7 +301,12 @@
             } else if (!strcmp(a1, "enemydamage") && es) {  // a bar of damage on every enemy system
                 for (int k = 0; k < es->systemCount; k++)
                     if (es->systems[k].damage < es->systems[k].def->level) es->systems[k].damage++;
+            } else if (!strcmp(a1, "break")) {  // one of our systems fully damaged: do break pilot
+                int si = ship_find_system(ps, system_from_name(a2));
+                if (si >= 0) ps->systems[si].damage = ps->systems[si].def->level;
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
+            else if (!strcmp(a1, "opendoors")) life_set_all_doors(ps, true);  // the open all button
+            else if (!strcmp(a1, "closedoors")) life_set_all_doors(ps, false);
             else if (!strcmp(a1, "store") && sInRun) {  // this beacon's store (stocked if new) on tab n1
                 run_store_enter(&sRun, RCTX);
                 sStoreOpen = true;

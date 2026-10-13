@@ -435,9 +435,16 @@ bool life_toggle_door(Ship* s, int door) {
     return true;
 }
 
+// As FTL's buttons: open all opens the inside doors, and pressed again with those all open, the
+// airlocks too. Close all closes everything.
 bool life_set_all_doors(Ship* s, bool open) {
+    bool insideShut = false;
+    for (int i = 0; i < s->doorCount; i++)
+        if (s->doors[i].roomA >= 0 && s->doors[i].roomB >= 0 && !s->doorState[i].forced) insideShut = true;
     bool changed = false;
     for (int i = 0; i < s->doorCount; i++) {
+        bool airlock = s->doors[i].roomA < 0 || s->doors[i].roomB < 0;
+        if (open && airlock && insideShut) continue;
         if (s->doorState[i].forced != open) changed = true;
         s->doorState[i].forced = open;
     }

@@ -1,0 +1,18 @@
+# The door buttons on the crew tab, tapped as a player would: open all twice (inside doors, then
+# airlocks), then close all. Screenshots after each tap.
+ship 1
+enemyfire 0
+at 0.5 do closeevents
+tab crew
+at 1 do tap 14 32
+at 2 expect opendoors > 0
+at 2 expect openairlocks == 0
+at 2.2 shot open_inside
+at 4.5 do tap 14 32
+at 5.5 expect openairlocks > 0
+at 5.7 shot open_airlocks
+at 8 do tap 40 32
+at 9 expect opendoors == 0
+at 9 expect openairlocks == 0
+at 9.2 shot closed
+at 11 done

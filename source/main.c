@@ -824,7 +824,8 @@ static void sync_augs(Ship* ps, CrewSet* pc, CrewSet* ec) {
         sLifeSense = !pc->crew[i].foreign && !strcmp(pc->races[pc->crew[i].race].name, "slug");
 }
 static ShipBlueprint sEnemyBp;  // the current enemy, generated from its blueprint for the sector (FTL's generator)
-static bool sCanJump;   // the JUMP button works: no fight, or the FTL drive is charged mid-fight
+static bool sCanJump;   // the JUMP button works: the FTL drive is charged and able to jump
+static int sFtlBlock;   // FTL_* from combat_ftl_block: what's stopping a charged drive
 static bool sFighting;  // an enemy is here and the fight is on
 static bool sMapOpen, sStoreOpen;
 static bool sSectorMapOpen;  // choosing the next sector
@@ -969,7 +970,7 @@ static int selected_crystal(const CrewSet* cs) {
     return sel >= 0 && !cs->crew[sel].drone && !strcmp(cs->races[cs->crew[sel].race].name, "crystal") ? sel : -1;
 }
 
-// A short message over the bottom of the crew map (e.g. "Crew stations saved") for a moment.
+// A short message over the bottom of the touch screen (e.g. "Crew stations saved") for a moment.
 #define TOAST_TIME 1.8f
 static char sToast[48];
 static float sToastAt = -100.0f;
@@ -5636,9 +5637,13 @@ int main(void) {
                 sSaveExists = false;
             }
         }
+        // FTL jumps only with the engines powered and someone at the working helm, in a fight or not
+        // (xftl PlayerShipUI.openJumpMap: isFtlReady && canChargeFTL).
+        sFtlBlock = combat_ftl_block(&combat, SIDE_PLAYER);
         sCanJump = sInRun && combat.result != COMBAT_LOST && !(sRun.over && sRun.won) && sJumpTime < 0.0f &&
                    // Not while a win is waiting to pay out (its reward comes ~4 s after the kill).
-                   (!haveEnemy ? sFtlCharge >= 1.0f : (combat.result == COMBAT_FIGHTING && sFtlCharge >= 1.0f));
+                   (!haveEnemy ? sFtlCharge >= 1.0f : (combat.result == COMBAT_FIGHTING && sFtlCharge >= 1.0f)) &&
+                   sFtlBlock == FTL_OK;
         // The jump itself happens at the white flash.
         if (sJumpTime >= 0.0f) {
             float before = sJumpTime;
@@ -5869,7 +5874,7 @@ int main(void) {
                 sStoreTab = 0;
                 sStoreSel = -1;
                 sInfoTitle[0] = '\0';
-            } else if (t >= 0 && run_can_jump(&sRun, t)) {
+            } else if (t >= 0 && run_can_jump(&sRun, t) && sCanJump) {  // the helm can break with the map open
                 sMapOpen = false;
                 sound_play("jumpLeave");
                 sJumpTarget = t;
@@ -5885,7 +5890,7 @@ int main(void) {
                 sSectorMapOpen = false;
                 sMapOpen = true;
                 sound_play("hoverBeep");
-            } else if (t == SMAP_JUMP && sRun.fuel > 0) {
+            } else if (t == SMAP_JUMP && sRun.fuel > 0 && sCanJump) {
                 sSectorMapOpen = false;
                 sNextRow = sSectorPick;
                 sound_play("jumpLeave");
@@ -6003,6 +6008,9 @@ int main(void) {
                         sound_play("hoverBeep");
                     } else {
                         sound_play("powerUpFail");
+                        static const char* const why[] = {NULL, "Engines need power to jump", "Piloting must be repaired to jump",
+                                                          "Piloting must be manned to jump", "Hacked: can't jump"};
+                        if (sFtlBlock != FTL_OK) toast(why[sFtlBlock]);
                     }
                 } else if (touch.px >= PAUSE_X && touch.px < PAUSE_X + PAUSE_W && combat.result != COMBAT_LOST) {
                     paused = !paused;
@@ -6343,7 +6351,6 @@ int main(void) {
         } else if (tab == TAB_CREW) {
             draw_backdrop(&sRun, 0, 0, BOT_W, BOT_H, 0.5f);
             draw_crew_tab(ship, crew, &map);
-            draw_toast();
             draw_effects(&combat, SIDE_PLAYER, &map);
             draw_beams(&combat, SIDE_PLAYER, &map);
             draw_drones(&combat, SIDE_PLAYER, &map);
@@ -6392,8 +6399,10 @@ int main(void) {
         } else {
             draw_power_tab(ship);
         }
-        if (debugOpen || !((sInRun && sRun.view.active) || sMapOpen || sSectorMapOpen || sStoreOpen || sShipOpen))
+        if (debugOpen || !((sInRun && sRun.view.active) || sMapOpen || sSectorMapOpen || sStoreOpen || sShipOpen)) {
             draw_tabs(ship, tab, index, bpCount, paused);
+            if (!debugOpen) draw_toast();  // crew stations saved, why we can't jump...
+        }
         if (sound_error() && now - startTime < 8000) {
             C2D_DrawRectSolid(0, TAB_H, 0, BOT_W, 14, C2D_Color32(90, 30, 30, 255));
             draw_text(4, TAB_H + 1, 0.4f, C2D_Color32(255, 220, 220, 255), sound_error());

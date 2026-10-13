@@ -21,6 +21,13 @@ rm -rf "$OUT" "$OUT.zip"
 mkdir -p "$OUT"
 cp ftl3ds.3dsx ftl3ds_public.cia dist/FTL2CIA.exe THIRD_PARTY_NOTICES.md LICENSE "$OUT/"
 mv "$OUT/ftl3ds_public.cia" "$OUT/ftl3ds.cia"
+# FTL2CIA carries tex3ds (GPLv3): its licence, the libraries' licences and its exact source.
+mkdir -p "$OUT/licenses"
+cp -r tools/installer/licenses/tex3ds "$OUT/licenses/"
+TEX3DS_SRC=dist/tex3ds-2.3.0.tar.gz
+[ -f "$TEX3DS_SRC" ] || curl -sfL -o "$TEX3DS_SRC" https://github.com/devkitPro/tex3ds/archive/refs/tags/v2.3.0.tar.gz ||
+    { echo "error: couldn't download tex3ds's source (the GPL needs it in the release)" >&2; exit 1; }
+cp "$TEX3DS_SRC" "$OUT/licenses/tex3ds/"
 cat > "$OUT/INSTALL.txt" <<EOF
 FTL3DS $VERSION - an engine for FTL: Faster Than Light on the Nintendo 3DS.
 

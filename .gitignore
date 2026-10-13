@@ -44,3 +44,6 @@ tools/cia/icon.png
 # Local notes
 DISCORD_SETUP.md
 FTL2CIA.log
+
+# Backdrop packs: FTL art, encoded (tools/cia/make_backdrops.py)
+*.pak

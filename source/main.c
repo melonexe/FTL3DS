@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "anim.h"
 #include "combat.h"
@@ -2478,12 +2479,83 @@ static void draw_tex(const Texture* t, float x, float y, float w, float h, float
 static Texture sBgTex, sPlanetTex;
 static char sBgName[64], sPlanetName[64];
 
+// A backdrop pack (tools/cia/make_backdrops.py), next to ftl.dat in a personal CIA's romfs or on
+// the SD card: the backgrounds and planets already shrunk and encoded as ETC1, ready for the GPU.
+// Only used with the ftl.dat it was made from.
+#define PACK_NAME 64
+static struct {
+    char file[64];
+    uint32_t count;
+    char (*path)[PACK_NAME];
+    uint32_t *offset, *size;
+} sPack;
+
+static void backdrop_pack_open(const char* datPath) {
+    const char* slash = strrchr(datPath, '/');
+    if (!slash) return;
+    snprintf(sPack.file, sizeof(sPack.file), "%.*s/backdrops.pak", (int)(slash - datPath), datPath);
+    FILE* f = fopen(sPack.file, "rb");
+    if (!f) return;
+    char magic[8];
+    uint32_t head[2];  // count, the size of the ftl.dat it was made from
+    struct stat st;
+    bool ok = fread(magic, 8, 1, f) == 1 && !memcmp(magic, "FTLBDP01", 8) && fread(head, 8, 1, f) == 1 &&
+              head[0] > 0 && head[0] < 1024 && !stat(datPath, &st) && (uint32_t)st.st_size == head[1];
+    if (ok) {
+        sPack.path = malloc((size_t)head[0] * PACK_NAME);
+        sPack.offset = malloc(head[0] * sizeof(uint32_t));
+        sPack.size = malloc(head[0] * sizeof(uint32_t));
+        ok = sPack.path && sPack.offset && sPack.size;
+        for (uint32_t i = 0; ok && i < head[0]; i++) {
+            uint32_t at[2];
+            ok = fread(sPack.path[i], PACK_NAME, 1, f) == 1 && fread(at, 8, 1, f) == 1;
+            sPack.path[i][PACK_NAME - 1] = '\0';
+            sPack.offset[i] = at[0];
+            sPack.size[i] = at[1];
+        }
+    }
+    fclose(f);
+    if (ok) {
+        sPack.count = head[0];
+    } else {
+        free(sPack.path);
+        free(sPack.offset);
+        free(sPack.size);
+        memset(&sPack, 0, sizeof(sPack));
+    }
+}
+
+// A backdrop's encoded texture from the pack (malloc'd), or NULL if it isn't there. Any thread: it
+// opens its own handle.
+static uint8_t* backdrop_pack_read(const char* path, uint32_t* size) {
+    for (uint32_t i = 0; i < sPack.count; i++) {
+        if (strcmp(sPack.path[i], path)) continue;
+        FILE* f = fopen(sPack.file, "rb");
+        uint8_t* data = f ? malloc(sPack.size[i]) : NULL;
+        bool ok = data && !fseek(f, sPack.offset[i], SEEK_SET) && fread(data, sPack.size[i], 1, f) == 1;
+        if (f) fclose(f);
+        if (!ok) {
+            free(data);
+            return NULL;
+        }
+        *size = sPack.size[i];
+        return data;
+    }
+    return NULL;
+}
+
 // Backdrops are big PNGs (1280x720), so they're decoded on a worker thread below the main
-// thread's priority; only making the GPU texture happens on the main thread.
+// thread's priority; only making the GPU texture happens on the main thread. From the pack there's
+// nothing to decode: the thread just reads it.
 typedef struct {
     char path[64];
     int minW, minH;
     uint8_t* rgba;
+    uint8_t* t3x;  // or this, from the pack
+    uint32_t t3xSize;
+    bool fromPack;  // the last one loaded came from the pack
+    u64 startMs;
+    float loadMs;  // how long the last one took, from asking to the texture being ready
     int w, h;
     volatile bool done;
     Thread thread;
@@ -2493,10 +2565,13 @@ typedef struct {
 
 static void image_job_run(void* arg) {
     ImageJob* j = arg;
-    uint32_t size;
-    uint8_t* png = ftldat_read(sDat, j->path, &size);
-    if (png && !texture_decode_png(png, size, j->minW, j->minH, &j->rgba, &j->w, &j->h)) j->rgba = NULL;
-    free(png);
+    j->t3x = backdrop_pack_read(j->path, &j->t3xSize);
+    if (!j->t3x) {
+        uint32_t size;
+        uint8_t* png = ftldat_read(sDat, j->path, &size);
+        if (png && !texture_decode_png(png, size, j->minW, j->minH, &j->rgba, &j->w, &j->h)) j->rgba = NULL;
+        free(png);
+    }
     __sync_synchronize();
     j->done = true;
 }
@@ -2512,7 +2587,9 @@ static void image_job_want(ImageJob* j, Texture* t, char* name, const char* path
     j->target = t;
     j->name = name;
     j->rgba = NULL;
+    j->t3x = NULL;
     j->done = false;
+    j->startMs = osGetTime();
     if (!path[0]) {
         j->done = true;
     } else {
@@ -2535,9 +2612,13 @@ static bool image_job_poll(ImageJob* j) {
     j->thread = NULL;
     gpu_idle();
     texture_free(j->target);
+    j->fromPack = j->t3x && texture_from_t3x(j->target, j->t3x, j->t3xSize);
     if (j->rgba) texture_from_rgba(j->target, j->rgba, j->w, j->h);
     free(j->rgba);
+    free(j->t3x);
     j->rgba = NULL;
+    j->t3x = NULL;
+    j->loadMs = (float)(osGetTime() - j->startMs);
     snprintf(j->name, 64, "%s", j->path);
     return false;
 }
@@ -5066,7 +5147,7 @@ int main(void) {
 
     bool romfs = R_SUCCEEDED(romfsInit());  // fails harmlessly when there's no romfs (.3dsx builds)
     for (size_t i = 0; i < sizeof(DAT_PATHS) / sizeof(DAT_PATHS[0]) && !opened; i++)
-        opened = ftldat_open(&dat, DAT_PATHS[i], err, sizeof(err));
+        if ((opened = ftldat_open(&dat, DAT_PATHS[i], err, sizeof(err)))) backdrop_pack_open(DAT_PATHS[i]);
     int bpCount = 0, enemyCount = 0;
     bool runLoaded = false;
     if (opened) {

@@ -152,6 +152,35 @@ bool texture_from_rgba(Texture* t, const uint8_t* rgba, int w, int h) {
     return true;
 }
 
+bool texture_from_t3x(Texture* t, const void* data, size_t size) {
+    memset(t, 0, sizeof(*t));
+    C3D_Tex* tex = malloc(sizeof(C3D_Tex));
+    Tex3DS_SubTexture* sub = malloc(sizeof(Tex3DS_SubTexture));
+    Tex3DS_Texture t3x = tex && sub ? Tex3DS_TextureImport(data, size, tex, NULL, false) : NULL;
+    if (!t3x && tex && sub && texture_low_memory) {  // linear memory is short: make room, try again
+        texture_low_memory();
+        t3x = Tex3DS_TextureImport(data, size, tex, NULL, false);
+    }
+    if (!t3x) {
+        free(tex);
+        free(sub);
+        return false;
+    }
+    *sub = *Tex3DS_GetSubTexture(t3x, 0);
+    Tex3DS_TextureFree(t3x);
+    C3D_TexSetFilter(tex, GPU_NEAREST, GPU_LINEAR);  // as texture_from_rgba
+    C3D_TexSetWrap(tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+
+    sTexBytes += tex->size;
+    sTexCount++;
+    t->image.tex = tex;
+    t->image.subtex = sub;
+    t->width = sub->width;
+    t->height = sub->height;
+    t->loaded = true;
+    return true;
+}
+
 bool texture_png_alpha_bounds(const uint8_t* png, uint32_t size, int rx, int ry, int rw, int rh, int* x0, int* y0,
                               int* x1, int* y1) {
     png_image img;

@@ -20,6 +20,9 @@ bool texture_load_png_fit(Texture* t, const uint8_t* png, uint32_t size, int min
 // another thread; *out is malloc'd) and making the GPU texture (main thread).
 bool texture_decode_png(const uint8_t* png, uint32_t size, int minW, int minH, uint8_t** out, int* outW, int* outH);
 bool texture_from_rgba(Texture* t, const uint8_t* rgba, int w, int h);
+// A texture from a .t3x file in memory (tex3ds output, e.g. ETC1 from a personal CIA's backdrop
+// pack): copied straight to the GPU, no decoding. Main thread.
+bool texture_from_t3x(Texture* t, const void* data, size_t size);
 
 // Smooth (linear) filtering when enlarged too, for soft images drawn bigger than they're stored.
 void texture_set_smooth(Texture* t);

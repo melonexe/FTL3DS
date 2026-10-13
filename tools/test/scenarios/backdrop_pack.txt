@@ -1,0 +1,18 @@
+# Backdrops from the pre-encoded pack (tools/cia/make_backdrops.py, saved as backdrops.pak next to
+# ftl.dat on the emulator's SD card): the background and planet come from it, at the start beacon
+# and after a jump. Compare the screenshots with a run without the pack for ETC1's quality.
+ship 1
+seed 3
+enemyfire 0
+at 0.5 do closeevents
+at 3 expect packcount > 0
+at 3 expect bgpacked == 1
+at 3 log state
+at 3.2 shot start
+at 4 do jump near
+at 9 do closeevents
+at 9.5 do closeevents
+at 10 log state
+at 10 expect bgpacked == 1
+at 10.2 shot jumped
+at 12 done

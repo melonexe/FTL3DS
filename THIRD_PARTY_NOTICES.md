@@ -107,3 +107,11 @@ PERFORMANCE OF THIS SOFTWARE.
 ## Python and PyInstaller
 
 FTL2CIA.exe is packaged with PyInstaller (GPL with an exception that allows distributing packaged programs) and contains the Python runtime (Python Software Foundation License).
+
+## tex3ds - GPL-3.0-or-later
+
+FTL2CIA.exe carries tex3ds.exe 2.3.0 (Copyright (c) 2017-2021 Michael Theall), devkitPro's Windows build, and runs it as a separate program to encode the backgrounds and planets from the player's ftl.dat as 3DS textures. It is free software under the GNU General Public License, version 3 or later, with no warranty.
+
+Every release zip has a `licenses/tex3ds/` folder with the GPL's full text, tex3ds's exact source code (`tex3ds-2.3.0.tar.gz`, also at https://github.com/devkitPro/tex3ds/releases/tag/v2.3.0), and the licences of the libraries devkitPro's build is statically linked with: ImageMagick 7.0.7-31, libjpeg-turbo 1.5.3, libpng 1.6.37, zlib 1.2.11 and bzip2. The same files are in this repository under `tools/installer/licenses/tex3ds/`.
+
+This software is based in part on the work of the Independent JPEG Group.

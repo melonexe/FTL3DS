@@ -33,6 +33,12 @@ else
     OUT="$ROOT/ftl3ds.cia"
     mkdir -p romfs
     if [ ! -f romfs/ftl.dat ] || [ "$DAT" -nt romfs/ftl.dat ]; then cp "$DAT" romfs/ftl.dat; fi
+    # Backdrops pre-encoded as ETC1 (needs devkitPro's tex3ds): they load several times faster.
+    # The game falls back to decoding the PNGs if the pack is missing or from another ftl.dat.
+    if [ ! -f romfs/backdrops.pak ] || [ romfs/ftl.dat -nt romfs/backdrops.pak ] ||
+        [ make_backdrops.py -nt romfs/backdrops.pak ]; then
+        python make_backdrops.py romfs/ftl.dat romfs/backdrops.pak || rm -f romfs/backdrops.pak
+    fi
 fi
 
 python make_art.py

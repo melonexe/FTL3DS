@@ -151,8 +151,13 @@ Builds `ftl3ds.cia` with your `ftl.dat` inside, so nothing goes on the SD card. 
 2. If `FTLGame.exe` sits next to `ftl.dat`, FTL's own icon is taken from it
    (`make_banner3d.py` in icon-only mode).
 3. `ftl.dat` is copied to `tools/cia/romfs/` (only when it's newer).
-4. bannertool makes `banner.bnr` and `icon.smdh` (title "FTL3DS").
-5. makerom packs `ftl3ds.elf`, `tools/cia/ftl3ds.rsf`, the icon, the banner and the romfs into
+4. `tools/cia/make_backdrops.py` writes `romfs/backdrops.pak`: FTL's backgrounds and planets,
+   shrunk as the game would and encoded as ETC1 by devkitPro's `tex3ds` (`$DEVKITPRO/tools/bin`).
+   The game copies them straight to the GPU instead of decoding the PNGs, so they load several
+   times faster; without the pack (or with one made from another `ftl.dat`) it decodes the PNGs as
+   before. Only rebuilt when `ftl.dat` or the script changes.
+5. bannertool makes `banner.bnr` and `icon.smdh` (title "FTL3DS").
+6. makerom packs `ftl3ds.elf`, `tools/cia/ftl3ds.rsf`, the icon, the banner and the romfs into
    `ftl3ds.cia`.
 
 The game reads `romfs:/ftl.dat` first, so this CIA ignores any `ftl.dat` on the SD card. It contains
@@ -178,13 +183,22 @@ sh tools/installer/build_installer.sh
 ```
 
 1. Gathers a payload in `tools/installer/payload/`: `ftl3ds.elf`, `ftl3ds.rsf`, the generated
-   `banner.bnr` and `icon.png`, `makerom.exe`, `bannertool.exe`.
+   `banner.bnr` and `icon.png`, `makerom.exe`, `bannertool.exe`, and devkitPro's `tex3ds.exe`
+   with its GPL text.
 2. PyInstaller packs [tools/installer/ftl2cia.py](tools/installer/ftl2cia.py) and the payload into
    one program, `dist/FTL2CIA.exe`.
 
 On a player's PC, FTL2CIA finds FTL (any Steam library, or GOG), copies their `ftl.dat` into a
-temporary romfs, takes FTL's icon from `FTLGame.exe` if it can, and runs bannertool and makerom: the
-same as step 3, with their files, on their machine.
+temporary romfs, encodes the backdrop pack with the bundled tex3ds (if that fails, it logs why and
+carries on without it), takes FTL's icon from `FTLGame.exe` if it can, and runs bannertool and
+makerom: the same as step 3, with their files, on their machine.
+
+tex3ds is GPLv3, so distributing FTL2CIA means distributing it under the GPL:
+`tools/installer/licenses/tex3ds/` holds its licence, the licences of the libraries devkitPro's
+build links in (ImageMagick, libjpeg-turbo, libpng, zlib, bzip2) and a README; `release.sh` adds
+that folder and tex3ds's exact source (`tex3ds-2.3.0.tar.gz`) to every release zip.
+`build_installer.sh` refuses any tex3ds but 2.3.0, so a devkitPro update can't silently ship a
+different version than the source and notices describe: update them together.
 
 To try it without packaging: `python tools/installer/ftl2cia.py` (after running the script above
 once, so `payload/` exists). Run from a plain source download, it has no payload and reports

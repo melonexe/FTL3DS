@@ -71,6 +71,11 @@
         if (!strcmp(n, "bossstage")) return sBossStage;
         if (!strcmp(n, "env")) return sEnvNow;
         if (!strcmp(n, "ftl")) return sFtlCharge;
+        if (!strcmp(n, "bgpacked")) return sBgJob.fromPack;  // the background came from the backdrop pack
+        if (!strcmp(n, "planetpacked")) return sPlanetJob.fromPack;
+        if (!strcmp(n, "packcount")) return sPack.count;
+        if (!strcmp(n, "bgloadms")) return sBgJob.loadMs;  // the last background's load time
+        if (!strcmp(n, "planetloadms")) return sPlanetJob.loadMs;
         if (!strcmp(n, "paused")) return paused;
         if (!strcmp(n, "linearfree")) return linearSpaceFree() / 1048576.0;
         if (!strcmp(n, "soundmb") || !strcmp(n, "soundheapmb") || !strcmp(n, "sounds")) {  // decoded effects
@@ -177,7 +182,7 @@
                                                "enemyzoltan", "enemycrew", "artillery", "result", "bossstage", "env", "ftl",
                                                "scrap", "fuel", "sector", "beacon", "event", "stage", "flagbeacon",
                                                "flagnext", "base", "baseturns", "over", "won", "baselost", "linearfree",
-                                               "textures", "soundmb", "soundheapmb", "sounds", "preloaded", "enemy", "fps", "cpums", "gpums", "jumpms", "shiploadms"};
+                                               "textures", "soundmb", "soundheapmb", "sounds", "preloaded", "enemy", "fps", "cpums", "gpums", "jumpms", "shiploadms", "bgpacked", "bgloadms", "planetloadms"};
             char line[768] = "STATE";
             for (size_t k = 0; k < sizeof(keys) / sizeof(keys[0]); k++) {
                 char part[32];

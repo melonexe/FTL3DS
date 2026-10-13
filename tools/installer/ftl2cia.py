@@ -26,6 +26,12 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+# The backdrop encoder (tools/cia/make_backdrops.py, with tools/ftldat.py); PyInstaller bundles
+# both from these paths.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path[:0] = [os.path.join(_HERE, "..", "cia"), os.path.join(_HERE, "..")]
+import make_backdrops  # noqa: E402
+
 APP = "FTL2CIA"
 
 
@@ -181,6 +187,22 @@ def build_cia(dat_path, out_path, log):
         os.makedirs(romfs)
         log("Copying ftl.dat...")
         shutil.copyfile(dat_path, os.path.join(romfs, "ftl.dat"))
+        tex3ds = os.path.join(pay, "tex3ds" + exe)
+        if os.path.isfile(tex3ds):
+            # Optional: backgrounds load several times faster pre-encoded, but the game decodes
+            # FTL's PNGs itself without the pack, so a failure here isn't fatal.
+            log("Encoding the backgrounds and planets...")
+            try:
+                make_backdrops.build_pack(os.path.join(romfs, "ftl.dat"), os.path.join(romfs, "backdrops.pak"),
+                                          tex3ds, lambda m: LOG.write(m))
+            except Exception as e:
+                log(f"Couldn't encode them ({e}); the game will load FTL's own images instead.")
+                try:
+                    os.remove(os.path.join(romfs, "backdrops.pak"))
+                except OSError:
+                    pass
+        else:
+            LOG.write("No tex3ds in the payload: no backdrop pack.")
         icon = os.path.join(work, "icon.png")
         game_exe = os.path.join(os.path.dirname(dat_path), "FTLGame.exe")
         if os.path.isfile(game_exe) and ftl_icon(game_exe, icon):

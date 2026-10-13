@@ -1,8 +1,8 @@
 #!/bin/sh
 # Packages the CIA builder as one Windows program: dist/FTL2CIA.exe.
 # Players run it, pick their ftl.dat and get an installable CIA. It carries the engine
-# (ftl3ds.elf), makerom, bannertool and the generated (non-FTL) banner and icon: nothing of
-# Subset Games'.
+# (ftl3ds.elf), makerom, bannertool, devkitPro's tex3ds (GPL: see licenses/tex3ds/) and the
+# generated (non-FTL) banner and icon: nothing of Subset Games'.
 #
 #   make                                  (devkitPro shell: builds ftl3ds.elf)
 #   sh tools/installer/build_installer.sh (needs Python with pyinstaller, pefile and pillow)
@@ -15,6 +15,11 @@ cd "$HERE"
 [ -f "$ROOT/ftl3ds.elf" ] || { echo "error: run make first" >&2; exit 1; }
 [ -f "$CIA/makerom.exe" ] && [ -f "$CIA/bt/windows-x86_64/bannertool.exe" ] ||
     { echo "error: put makerom.exe in tools/cia/ and bannertool in tools/cia/bt/ (see README)" >&2; exit 1; }
+TEX3DS="${DEVKITPRO:-/c/devkitPro}/tools/bin/tex3ds.exe"
+[ -f "$TEX3DS" ] || TEX3DS=/c/devkitPro/tools/bin/tex3ds.exe
+[ -f "$TEX3DS" ] || { echo "error: no tex3ds.exe (devkitPro's 3ds-dev: tools/bin/tex3ds.exe)" >&2; exit 1; }
+"$TEX3DS" -v | head -1 | grep -q "tex3ds v2.3.0" ||
+    { echo "error: licenses/tex3ds/ is for tex3ds 2.3.0; update it for $("$TEX3DS" -v | head -1)" >&2; exit 1; }
 
 rm -rf payload build
 mkdir -p payload
@@ -24,10 +29,13 @@ cp "$CIA/icon.png" payload/icon.png
 cp "$ROOT/ftl3ds.elf" "$CIA/ftl3ds.rsf" payload/
 cp "$CIA/makerom.exe" payload/makerom.exe
 cp "$CIA/bt/windows-x86_64/bannertool.exe" payload/bannertool.exe
+cp "$TEX3DS" payload/tex3ds.exe
+cp "$HERE/licenses/tex3ds/tex3ds-COPYING.txt" payload/  # the GPL travels with the program
 echo "${FTL3DS_VERSION:-dev}" > payload/version.txt  # shown in its title bar and log (release.sh sets it)
 
 python -m PyInstaller --noconfirm --onefile --windowed --name FTL2CIA \
     --add-data "$(cygpath -w "$HERE/payload");payload" --hidden-import pefile \
+    --paths "$(cygpath -w "$CIA")" --paths "$(cygpath -w "$ROOT/tools")" --hidden-import make_backdrops \
     --distpath "$ROOT/dist" --workpath build --specpath build "$(cygpath -w "$HERE/ftl2cia.py")"
 rm -rf build
 ls -l "$ROOT/dist/FTL2CIA.exe"

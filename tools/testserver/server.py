@@ -113,13 +113,14 @@ def enqueue(branch, reason):
 
 
 def summarize(results):
-    base = [r for r in results if r["kind"] == "base"]
+    base = [r for r in results if r["kind"] == "base" and r["status"] != "skipped"]
     sweep = [r for r in results if r["kind"] == "sweep"]
     serious = [r for r in results if r["status"] in ("crash", "hung", "timeout", "invalid")]
     return {
         "scenarios": len(base),
         "base_passed": sum(r["status"] == "pass" for r in base),
         "base_failed": sum(r["status"] != "pass" for r in base),
+        "skipped": sum(r["status"] == "skipped" for r in results),
         "sweep_runs": len(sweep),
         "sweep_passed": sum(r["status"] == "pass" for r in sweep),
         "sweep_failed": sum(r["status"] == "fail" for r in sweep),

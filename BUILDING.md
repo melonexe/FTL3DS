@@ -170,7 +170,8 @@ damage and the power it takes away) logs `ERROR invariant: <rule> (<whose>): <va
 NaNs count at once. So every run, in every seed of a sweep, checks hundreds of thousands of game
 states, not just its scenario's few `expect`s. Screenshots
 (`shot`) are skipped, there's no sound, and `fps`/memory values are placeholders: what you see or
-hear still needs Azahar or a console.
+hear still needs Azahar or a console. A scenario that can only work in Azahar (say, one needing a
+CIA's romfs) starts with a comment line `# headless: skip <why>` and is reported as skipped.
 
 `ftl.dat` is read as `romfs:/ftl.dat` from the folder it's in, and each run gets its own temporary
 SD card folder (`FTL3DS_ROMFS` and `FTL3DS_SDMC`). If the game starts using a 3DS function the

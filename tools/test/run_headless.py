@@ -11,6 +11,10 @@ scenario's checks are written for its own seed, so a sweep's failed check is onl
 run that crashes, never finishes or breaks an invariant (test/invariants.c: rules the game state
 must always obey, checked every frame) is an error, in the sweep too.
 
+A scenario that only makes sense in Azahar (it needs something the PC stand-ins don't have, e.g. a
+CIA's romfs or GPU texture formats) says so with a comment line "# headless: skip <why>", and is
+reported as skipped.
+
 Every run gets its own SD card folder; ftl.dat is shared read-only (it's read as romfs:/ftl.dat).
 Time inside the game is simulated, so runs are repeatable and take seconds. Screenshots ("shot")
 are skipped. Exit code: 1 if any base run failed or any run crashed or hung.
@@ -126,13 +130,20 @@ def main():
     if not os.path.isfile(args.game):
         sys.exit(f"no {args.game}: build it with make -C test/headless")
 
-    jobs = []
+    jobs, skipped = [], []
     for fn in sorted(os.listdir(args.scenarios)):
         name = fn[:-4]
         if not fn.endswith(".txt") or not fnmatch.fnmatch(name, args.filter):
             continue
         with open(os.path.join(args.scenarios, fn), encoding="utf-8") as f:
             text = f.read()
+        skip = re.search(r"^#\s*headless:\s*skip\b\s*(.*)$", text, re.M)
+        if skip:
+            why = skip.group(1).strip() or "Azahar only"
+            skipped.append({"scenario": name, "seed": None, "kind": "base", "status": "skipped", "passed": 0,
+                            "failed": 0, "errors": 0, "invariants": 0, "sim_seconds": 0, "wall_seconds": 0,
+                            "log": "Skipped headless: " + why + "\n", "stderr": ""})
+            continue
         jobs.append((name, text, None))
         jobs += [(name, text, s) for s in range(1, args.seeds + 1)]
 
@@ -157,10 +168,11 @@ def main():
                 tag = r["status"].upper() + ("" if r["kind"] == "base" else f" (seed {r['seed']})")
                 print(f"{r['scenario']}: {tag}", flush=True)
 
+    results += skipped
     results.sort(key=lambda r: (r["scenario"], r["seed"] is not None, r["seed"] or 0))
-    bad = [r for r in results if (r["kind"] == "base" and r["status"] != "pass") or r["status"] in SERIOUS]
-    base = [r for r in results if r["kind"] == "base"]
-    print(f"{sum(r['status'] == 'pass' for r in base)}/{len(base)} scenarios passed, "
+    bad = [r for r in results if (r["kind"] == "base" and r["status"] not in ("pass", "skipped")) or r["status"] in SERIOUS]
+    base = [r for r in results if r["kind"] == "base" and r["status"] != "skipped"]
+    print(f"{sum(r['status'] == 'pass' for r in base)}/{len(base)} scenarios passed ({len(skipped)} skipped), "
           f"{len(results) - len(base)} sweep runs, {len(bad)} problems, {time.time() - t0:.1f} s")
     if args.json:
         with open(args.json, "w") as f:

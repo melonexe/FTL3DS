@@ -25,13 +25,14 @@ bool system_is_mannable(int type) {
 }
 
 void system_default_slot(int type, int* slot, int* dir) {
-    // Blueprints that use the default room art either give these explicitly
-    // (pilot, weapons, sensors, doors) or rely on them (shields, engines, which we read off the art).
+    // Where the default room art puts each console, for blueprints that don't give a <slot> (most
+    // don't, for engines): slots count row by row from the top-left tile (xftl SystemInstallConfiguration,
+    // and the art: room_engines.png has its console on the bottom-left tile's bottom wall).
     switch (type) {
         case SYS_PILOT: *slot = 0; *dir = DIR_RIGHT; return;
         case SYS_SHIELDS: *slot = 0; *dir = DIR_LEFT; return;
         case SYS_WEAPONS: *slot = 1; *dir = DIR_UP; return;
-        case SYS_ENGINES: *slot = 1; *dir = DIR_RIGHT; return;
+        case SYS_ENGINES: *slot = 2; *dir = DIR_DOWN; return;
         case SYS_SENSORS: *slot = 1; *dir = DIR_DOWN; return;
         case SYS_DOORS: *slot = 1; *dir = DIR_UP; return;
         default: *slot = -1; *dir = DIR_DOWN; return;

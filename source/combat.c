@@ -13,7 +13,8 @@
 // Numbers from the FTL wiki (ftl.fandom.com: Shields, Engines, Piloting, Crew skills, Weapons), Mike
 // Hopley's measurements (mikehopley.github.io) and xftl, a reimplementation built from the
 // reverse-engineered game (gitlab.com/znixian/xftl), unless marked as our own choice.
-static const float SHIELD_LAYER_TIME[5] = {2.0f, 2.0f, 1.72f, 1.5f, 1.33f};  // seconds for the n-th layer
+// Seconds for the n-th layer: 2 / (1 + (n - 1) / 6), n counted from the 2nd (FTL's Shields update).
+static const float SHIELD_LAYER_TIME[5] = {2.0f, 2.0f, 12.0f / 7.0f, 1.5f, 4.0f / 3.0f};
 // Manning bonuses by skill level 0/1/2 (wiki: Crew skills).
 static const int MAN_EVASION[3] = {5, 7, 10};              // piloting and engines: + evasion
 static const float SHIELDS_MANNED_RATE[3] = {1.1f, 1.2f, 1.3f};   // faster recharge
@@ -51,7 +52,7 @@ static void beam_timing(const WeaponDef* d, float* delay, float* duration) {
 #define DIST_TO_ENEMY 44.0f         // speed units from player mounts to enemy shields (mean of measured)
 #define DIST_TO_PLAYER 70.0f        // from enemy mounts to player shields
 #define SHOT_SPACING 0.25f          // seconds between shots of a volley (dual/burst shot duration)
-#define UNPOWERED_DRAIN 10.0f       // charge (seconds) lost per second by an unpowered weapon (xftl)
+#define UNPOWERED_DRAIN 6.0f        // charge (seconds) lost per second by an unpowered weapon (FTL: 0.375 a 1/16 s tick)
 #define ION_SECONDS 5.0f            // per point of ion damage (wiki: Ion weapons)
 #define CLOAK_PER_POWER 5.0f        // xftl Cloaking.kt / wiki Cloaking
 #define CLOAK_EVASION 60
@@ -1431,9 +1432,14 @@ static void update_repairs(Combat* c, int side, float dt) {
             }
 }
 
-// The flagship's AI repairs every damaged system at once, a bar per AI_REPAIR_SECONDS (the wiki
-// says "a set rate"; this rate is our choice), except where there's a fire or a breach.
-#define AI_REPAIR_SECONDS 20.0f
+// Ships run by their AI repair every damaged system at once, a bar per AI_REPAIR_SECONDS: crewless
+// auto-ships, and the flagship once its crew are dead. FTL's own rate: its repair at speed 1 (12.5 s
+// a bar) slowed to a third. Not where there's a fire or a breach (our choice).
+#define AI_REPAIR_SECONDS 37.5f
+
+static bool ai_self_repairs(const Combat* c, const Ship* s) {
+    return ai_controlled(c, s) || (s->bp->enemy && s->bp->crewKinds == 0);
+}
 
 static void update_ai_repairs(Ship* s, float dt) {
     for (int i = 0; i < s->systemCount; i++) {
@@ -2997,7 +3003,7 @@ void combat_update(Combat* c, float dt) {
     for (int side = 0; side < 2; side++) {
         update_ship(c, side, dt);
         update_repairs(c, side, dt);
-        if (ai_controlled(c, c->ship[side])) update_ai_repairs(c->ship[side], dt);
+        if (ai_self_repairs(c, c->ship[side])) update_ai_repairs(c->ship[side], dt);
         if (c->shieldFlash[side] > 0.0f) c->shieldFlash[side] -= dt;
     }
     bool repairing = false;

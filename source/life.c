@@ -19,6 +19,7 @@ static const float O2_REFILL[4] = {0.0f, 1.2f, 4.8f, 8.4f};
 #define O2_BREACH_LOSS 8.0f      // ... and per hull breach or Lanius,
 #define O2_LOSS_FALLOFF 0.75f    // times 0.75 per room of distance through open doors
 #define O2_FIRE_LOSS 0.96f       // %/s per fire, in its own room only
+#define O2_HACKED_DRAIN 6.0f     // %/s from every room while a hacking pulse hits the oxygen system (wiki: Hacking)
 
 #define SUFFOCATE_DPS 6.4f
 static const float MEDBAY_HPS[4] = {0.0f, 6.4f, 9.6f, 19.2f};
@@ -113,6 +114,7 @@ static void update_oxygen(Ship* s, const CrewSet* cs, float dt) {
     int o2 = ship_find_system(s, SYS_OXYGEN);
     int o2Power = ship_system_power(s, o2);
     float change = o2Power > 0 ? O2_REFILL[o2Power < 3 ? o2Power : 3] : -O2_LOSS_UNPOWERED;
+    if (o2 >= 0 && s->hackPulse > 0.0f && s->hackedSys == o2) change = -O2_HACKED_DRAIN;  // a hack drains, not just stops
     for (int r = 0; r < s->roomCount; r++) s->oxygen[r] += change * dt;
 
     // Rooms joined by open doors share their air.
@@ -334,12 +336,14 @@ void life_update(Ship* s, CrewSet* cs, float dt) {
         if (race->breathes && s->oxygen[r] < LIFE_SUFFOCATE_BELOW)
             c->health -= SUFFOCATE_DPS * dt * (!strcmp(race->name, "crystal") ? 0.5f : 1.0f) *
                          (!c->foreign && s->aug[AUG_O2_MASKS] ? 0.5f : 1.0f);  // Emergency Respirators
-        // The medbay heals the ship's own crew, not intruders (FTL wiki: Medbay).
-        if (med >= 0 && s->systems[med].room == r && !c->foreign && !c->drone) {
+        // The medbay heals the ship's own crew, not intruders (FTL wiki: Medbay); crew drones (repair,
+        // battle) at a fifth of the rate, as in FTL.
+        float droneHeal = c->drone ? 0.2f : 1.0f;
+        if (med >= 0 && s->systems[med].room == r && !c->foreign) {
             int p = ship_system_power(s, med);
-            c->health += MEDBAY_HPS[p < 3 ? p : 3] * dt;
-        } else if (med >= 0 && s->aug[AUG_NANO_MEDBAY] && !c->foreign && !c->drone && ship_system_power(s, med) > 0) {
-            c->health += 1.6f * dt;  // Engi Med-bot Dispersal (wiki): anywhere aboard, while the medbay has power
+            c->health += MEDBAY_HPS[p < 3 ? p : 3] * droneHeal * dt;
+        } else if (med >= 0 && s->aug[AUG_NANO_MEDBAY] && !c->foreign && ship_system_power(s, med) > 0) {
+            c->health += 1.6f * droneHeal * dt;  // Engi Med-bot Dispersal (wiki): anywhere aboard, while the medbay has power
         }
         if (c->health > race->maxHealth) c->health = race->maxHealth;
         if (c->health <= 0.0f) {

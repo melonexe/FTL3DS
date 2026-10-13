@@ -1,0 +1,14 @@
+# Sensors down: we see only the rooms our crew are standing in. Ordering someone across the ship
+# mustn't light up the room they're heading for (it did: the destination was revealed at once).
+# 14 of the Kestrel's rooms are hidden; still 14 just after the order, and still 14 once they've
+# arrived (their old room went dark, the destination lit up).
+ship 1
+enemyfire 0
+tab crew
+at 0.5 do closeevents
+at 1 do break sensors
+at 2 expect hiddenrooms == 14
+at 2.5 do send 1 0
+at 2.7 expect hiddenrooms == 14
+at 20 expect hiddenrooms == 14
+at 21 done

@@ -24,6 +24,7 @@
 //   do fire N | breach N              start fires / breaches in N random rooms of our ship
 //   do map                            open the beacon map
 //   do enemydamage                    a bar of damage on every enemy system
+//   do send N R                       send our crew member N (1-based) to room R
 //   do evade N                        the next N shots at our ship miss (a real dodge: piloting and
 //                                     engines learn as if the ship had dodged them)
 //   do lockdown                       our first Crystal uses the lockdown where they stand
@@ -41,7 +42,9 @@
 //                                     enemyhulllost (hull the enemy has lost this fight, repairs or not),
 //                                     manned_<system> (1 if someone is at its station),
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
-//                                     dodges (shots that have missed our ship), enemyguns
+//                                     dodges (shots that have missed our ship), hiddenrooms (our
+//                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
+//                                     store has a picture for it), enemyguns
 //                                     (enemy weapons powered)
 //   done                              log DONE and quit
 // Every frame, test/invariants.c also checks the rules the game state must always obey and logs
@@ -87,6 +90,16 @@
         if (!strcmp(n, "planetloadms")) return sPlanetJob.loadMs;
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
         if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
+        if (!strncmp(n, "droneart_", 9)) {  // 1 if the store has a picture for that drone blueprint
+            int ok = item_art(ITEM_DRONE, n + 9) != NULL;
+            item_art_clear();
+            return ok;
+        }
+        if (!strcmp(n, "hiddenrooms")) {  // our rooms we can't see into (sensors down, nobody there)
+            int k = 0;
+            for (int r = 0; r < ps->roomCount; r++) k += room_hidden(ps, r);
+            return k;
+        }
         if (!strcmp(n, "enemyguns")) {  // enemy weapons powered
             int k = 0;
             for (int i = 0; es && i < es->weaponCount; i++) k += es->weapons[i].powered;
@@ -337,6 +350,8 @@
                 if (si >= 0) ps->systems[si].damage = ps->systems[si].def->level;
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
             else if (!strcmp(a1, "stereo")) sTestSlider = n1 / 100.0f;  // 3D slider, percent
+            else if (!strcmp(a1, "send") && n1 >= 1 && n1 <= PLAYER_CREW->count)  // do send <crew#> <room#>
+                crew_order(PLAYER_CREW, ps, n1 - 1, atoi(a3));
             else if (!strcmp(a1, "evade")) gTestEvade = n1;  // the next N shots at our ship miss (the game's dodge, XP and all)
             else if (!strcmp(a1, "opendoors")) life_set_all_doors(ps, true);  // the open all button
             else if (!strcmp(a1, "closedoors")) life_set_all_doors(ps, false);

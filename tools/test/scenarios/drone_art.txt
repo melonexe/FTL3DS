@@ -1,0 +1,16 @@
+# Every drone has a store picture: its sprite, the crew figure for the walking drones
+# (anti-personnel, repair), or FTL's drone icon (boarding, ion intruder, shield). The walking and
+# boarding drones and the shield drone used to have none.
+ship 1
+enemyfire 0
+at 1 expect droneart_BATTLE == 1
+at 1 expect droneart_REPAIR == 1
+at 1 expect droneart_BOARDER == 1
+at 1 expect droneart_BOARDER_ION == 1
+at 1 expect droneart_DRONE_SHIELD_PLAYER == 1
+at 1 expect droneart_ANTI_DRONE == 1
+at 1 expect droneart_COMBAT_1 == 1
+at 1 expect droneart_DEFENSE_1 == 1
+at 1 expect droneart_SHIP_REPAIR == 1
+at 1 expect droneart_COMBAT_FIRE == 1
+at 2 done

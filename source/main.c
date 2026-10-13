@@ -251,11 +251,11 @@ static void update_visibility(const Ship* player, const CrewSet* crew, const Shi
     sVis.ship[0] = player;
     sVis.ship[1] = enemy;
     for (int r = 0; r < player->roomCount; r++) sVis.hidden[0][r] = level < 1;
+    // Without sensors, only the rooms our crew are standing in (not where they're headed: that
+    // would show a room before anyone gets there).
     for (int i = 0; i < crew->count; i++) {
-        int r = ship_room_at(player, crew->crew[i].destX, crew->crew[i].destY);
-        int r2 = ship_room_at(player, (int)floorf(crew->crew[i].x / TILE), (int)floorf(crew->crew[i].y / TILE));
+        int r = ship_room_at(player, (int)floorf(crew->crew[i].x / TILE), (int)floorf(crew->crew[i].y / TILE));
         if (r >= 0) sVis.hidden[0][r] = false;
-        if (r2 >= 0) sVis.hidden[0][r2] = false;
     }
     if (enemy) {
         for (int r = 0; r < enemy->roomCount; r++) sVis.hidden[1][r] = level < 2;
@@ -577,15 +577,19 @@ static void draw_mounted(const Ship* s, const Camera* cam, const WeaponSlot* w, 
         }
         float mx, my;
         combat_mount_point(s, i, &mx, &my);
-        // Offset from the mount point to the frame centre, mirrored and rotated like the sprite.
+        // An unpowered weapon sits 12 px back into the hull, along its mount's slide direction, and
+        // slides out when powered (xftl Weapons.drawBackground).
+        float back = roundf(12.0f * (w->slide - 1.0f));
+        mx += m->slideX * back;
+        my += m->slideY * back;
+        // Offset from the mount point to the frame centre, mirrored and rotated like the sprite (all
+        // in ship space, so a turned camera turns it too).
         float dx = w->artFw * 0.5f - w->mountPx, dy = w->artFh * 0.5f - w->mountPy;
         if (m->mirror) dx = -dx;
-        float angle = m->rotate ? (float)M_PI_2 : 0.0f;
+        float angle = (m->rotate ? (float)M_PI_2 : 0.0f) + cam_angle(cam);
         float rx = m->rotate ? -dy : dx, ry = m->rotate ? dx : dy;
         float cx, cy;
-        to_screen(cam, mx, my, &cx, &cy);
-        cx += rx * cam->zoom;
-        cy += ry * cam->zoom;
+        to_screen(cam, mx + rx, my + ry, &cx, &cy);
         Tex3DS_SubTexture sub = {
             .width = (u16)w->artFw,
             .height = (u16)w->artFh,
@@ -3461,9 +3465,19 @@ static const ItemArt* item_art(int kind, const char* name) {
             a->rotate = true;
         }
     } else if (kind == ITEM_DRONE) {
+        // Its sprite; for the drones that walk inside (anti-personnel, repair) their crew figure;
+        // failing both (boarding, ion intruder, shield drones), FTL's drone icon.
         const DroneDef* d = drone_find(name);
-        if (d) {
+        if (d && d->image[0]) {
             snprintf(path, sizeof(path), "img/ship/drones/%s_base.png", d->image);
+            load_crop(&a->tex, path, 0, 0, 0, 0, false);
+        }
+        if (d && !a->tex.loaded && (d->type == DRONE_BATTLE || d->type == DRONE_CREW_REPAIR)) {
+            snprintf(path, sizeof(path), "img/people/%s_base.png", d->type == DRONE_BATTLE ? "battle" : "repair");
+            load_crop(&a->tex, path, 0, 0, 35, 35, false);  // first walking-down frame, as for crew
+        }
+        if (d && !a->tex.loaded && d->icon[0]) {
+            snprintf(path, sizeof(path), "img/systemUI/weapbox_icon_D_%s.png", d->icon);
             load_crop(&a->tex, path, 0, 0, 0, 0, false);
         }
     } else if (kind == ITEM_CREW) {
@@ -5151,6 +5165,7 @@ int main(void) {
     static Combat combat;
     char err[128] = "";
     bool opened = false;
+    bool startMusic = false;
 
     bool romfs = R_SUCCEEDED(romfsInit());  // fails harmlessly when there's no romfs (.3dsx builds)
     for (size_t i = 0; i < sizeof(DAT_PATHS) / sizeof(DAT_PATHS[0]) && !opened; i++)
@@ -5159,7 +5174,7 @@ int main(void) {
     bool runLoaded = false;
     if (opened) {
         animdb_open(&anims, &dat);
-        if (sound_init(&dat)) sound_music(sound_random_track());
+        startMusic = sound_init(&dat);  // played once the first menu frame is up, not over a black screen
         texture_low_memory = sound_free_idle;  // textures come first when linear memory runs out
         settings_load();
         sSaveExists = save_exists();
@@ -5701,6 +5716,10 @@ int main(void) {
             else if (sMenu == MENU_LOADOUT) draw_loadout();
             else draw_pause();
             C3D_FrameEnd(0);
+            if (startMusic) {  // the menu is on screen now
+                startMusic = false;
+                if (!sInRun) sound_music(sound_random_track());
+            }
             continue;
         }
 

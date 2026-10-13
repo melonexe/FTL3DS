@@ -137,6 +137,7 @@ typedef struct {
 typedef struct {
     int x, y;  // relative to the hull image
     bool rotate, mirror;
+    signed char slideX, slideY;  // which way the weapon slides out when powered (layout "slide"), 0 0 for none
 } WeaponMount;
 
 // A piece the ship breaks into when destroyed (layout <explosion><gibN>).
@@ -169,6 +170,7 @@ typedef struct {
     float fullCharge; // seconds of charge needed to fire (cooldown x charge levels, less chain)
     float beamX, beamY, beamAngle;
     float charge;     // seconds charged, up to def->cooldown
+    float slide;      // 0 retracted into the hull (unpowered) .. 1 out (powered), moving at 2/s (xftl Weapons)
     int target;       // room index on the other ship, or -1
     int burstLeft;    // shots still to fire from the current volley
     float burstTimer;

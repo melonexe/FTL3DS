@@ -279,6 +279,8 @@ static bool room_hidden(const Ship* s, int room) {
 #define GIB_FADE 1.5f
 #define GIB_SPIN 0.3f    // our tuning: a third of the game's spin reads better on the small screen
 #define GIB_DRIFT 40.0f  // pixels per second per unit of gib speed (the game uses 25)
+#define GIB_BURST 1.8f   // 3D build: the pieces blow apart harder...
+#define GIB_POP -5.0f    // ... and come out of the screen, each at its own rate, as far as this depth
 
 static bool draw_gibs(const Ship* s, const Camera* cam) {
     if (s->deathTime < 0.0f) return false;
@@ -291,14 +293,19 @@ static bool draw_gibs(const Ship* s, const Camera* cam) {
     for (int i = s->gibCount - 1; i >= 0; i--) {
         const Gib* g = &s->gibs[i];
         if (!g->tex.loaded) continue;
-        float dist = g->v * t * GIB_DRIFT, ang = -g->dir * (float)M_PI / 180.0f;
+        float dist = g->v * t * GIB_DRIFT * GIB_BURST, ang = -g->dir * (float)M_PI / 180.0f;
+        float pop = t * g->pop / GIB_TIME;  // 0 at the break-up, 1 once fully out
+        if (pop > 1.0f) pop = 1.0f;
+        stereo_depth(STEREO_SHIP + (GIB_POP - STEREO_SHIP) * pop);
+        float scale = cam->zoom * (1.0f + 0.35f * pop * sSlider);  // nearer looks bigger
         float cx = ox + s->hullX + g->x + g->tex.width * 0.5f + cosf(ang) * dist;
         float cy = oy + s->hullY + g->y + g->tex.height * 0.5f + sinf(ang) * dist;
         float X, Y;
         to_screen(cam, cx, cy, &X, &Y);
-        C2D_DrawImageAtRotated(g->tex.image, X, Y, 0, k * g->spin * GIB_SPIN * 2.0f * (float)M_PI + cam_angle(cam), &tint, cam->zoom,
-                               cam->zoom);
+        C2D_DrawImageAtRotated(g->tex.image, X, Y, 0, k * g->spin * GIB_SPIN * 2.0f * (float)M_PI + cam_angle(cam), &tint, scale,
+                               scale);
     }
+    stereo_depth(STEREO_SHIP);
     return true;
 }
 

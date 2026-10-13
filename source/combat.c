@@ -3118,6 +3118,7 @@ void combat_update(Combat* c, float dt) {
                 g->v = g->vmin + (g->vmax - g->vmin) * r1;
                 g->dir = g->dmin + (g->dmax - g->dmin) * r2;
                 g->spin = g->amin + (g->amax - g->amin) * r3;
+                g->pop = 0.2f + 0.8f * (rand() / (float)RAND_MAX);
             }
             for (int i = 0; i < 8; i++) {
                 float x, y;

@@ -146,6 +146,7 @@ typedef struct {
     int x, y;                      // offset from the hull image
     float vmin, vmax, dmin, dmax, amin, amax;  // speed, direction (degrees), spin (turns over the animation)
     float v, dir, spin;            // rolled when the ship dies
+    float pop;                     // 3D: how fast it comes out of the screen towards the player (0.2..1)
 } Gib;
 
 typedef struct {

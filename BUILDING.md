@@ -171,9 +171,9 @@ docker build -t ftl3ds-tests tools/testserver
 docker run --rm -v "<repo>:/src" -v "<folder with ftl.dat>:/ftl:ro" -w /src ftl3ds-tests     sh -c "make -C test/headless && python3 tools/test/run_headless.py --dat /ftl/ftl.dat"
 ```
 
-[tools/testserver](tools/testserver/README.md) does this automatically for every new commit on the
-branches it watches, and shows the results in a web page; it's a Docker app made to run on a home
-server (e.g. TrueNAS).
+[tools/testserver](tools/testserver/README.md) does this automatically for every new commit and
+shows the results in a web page: a Docker app that runs on your PC (watching your local repository,
+every branch) or on a home server such as TrueNAS (watching GitHub).
 
 ## 3. Personal CIA
 

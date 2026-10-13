@@ -4,7 +4,8 @@ FROM python:3.12-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpng-dev zlib1g-dev git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system safe.directory '*'  # a local repository mounted in belongs to another user
 
 WORKDIR /app
 COPY server.py index.html ./

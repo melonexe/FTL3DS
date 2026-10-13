@@ -1,16 +1,19 @@
-"""FTL3DS test server: watches GitHub branches, builds the headless game (test/headless) for each new
-commit, runs every scenario test plus seed sweeps (tools/test/run_headless.py), keeps the results and serves a web
-page to follow them. Python standard library only. See tools/testserver/README.md.
+"""FTL3DS test server: watches a repository's branches (on GitHub, or a local clone), builds the
+headless game (test/headless) for each new commit, runs every scenario test plus seed sweeps
+(tools/test/run_headless.py), keeps the results and serves a web page to follow them. Python standard
+library only. See tools/testserver/README.md.
 
 Settings (environment):
-    REPO_URL      https://github.com/melonexe/FTL3DS.git
-    BRANCHES      main,experimental/stereo-3d   (comma-separated)
+    REPO_URL      https://github.com/melonexe/FTL3DS.git   (or a local repository's path)
+    BRANCHES      main,experimental/stereo-3d   (comma-separated; * for every branch)
+    FTL_DAT       /data/ftl.dat
     POLL_MINUTES  10      how often to look for new commits (0: only the Run buttons)
     SEEDS         10      sweep runs per scenario, with seeds 1..N
     JOBS          CPUs    tests run in parallel
     KEEP_RUNS     200     older results are deleted
     PORT          8080
-Data (/data, a volume): ftl.dat (yours, read-only to the game), repo/ (a clone), runs/ (results).
+Data (/data, a volume): ftl.dat unless FTL_DAT says otherwise (yours, read-only to the game),
+repo/ (the server's clone), runs/ (results).
 """
 import json
 import os
@@ -32,7 +35,7 @@ JOBS = int(os.environ.get("JOBS", "0")) or os.cpu_count() or 2
 KEEP_RUNS = int(os.environ.get("KEEP_RUNS", "200"))
 PORT = int(os.environ.get("PORT", "8080"))
 DATA = os.environ.get("DATA_DIR", "/data")
-DAT = os.path.join(DATA, "ftl.dat")
+DAT = os.environ.get("FTL_DAT") or os.path.join(DATA, "ftl.dat")
 REPO = os.path.join(DATA, "repo")
 RUNS = os.path.join(DATA, "runs")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,7 +45,7 @@ lock = threading.Lock()
 queue = deque()       # {"branch", "reason"}
 current = None        # the run in progress (its meta, plus "phase" and "progress")
 wake = threading.Event()
-last_poll = {"at": None, "error": None}
+last_poll = {"at": None, "error": None, "branches": []}
 
 
 def git(*args, cwd=REPO, check=True):
@@ -52,9 +55,22 @@ def git(*args, cwd=REPO, check=True):
     return p.stdout.strip()
 
 
-def remote_head(branch):
-    out = git("ls-remote", REPO_URL, f"refs/heads/{branch}", cwd=DATA)
-    return out.split()[0] if out else None
+def heads():
+    """{branch: latest commit} for the watched branches that exist."""
+    found = {}
+    for line in git("ls-remote", "--heads", REPO_URL, cwd=DATA).splitlines():
+        sha, ref = line.split()
+        found[ref[len("refs/heads/"):]] = sha
+    if "*" not in BRANCHES:
+        found = {b: found[b] for b in BRANCHES if b in found}
+    last_poll["branches"] = sorted(found, key=lambda b: (b != "main", b))
+    return found
+
+
+def check_for_commits():
+    for b, sha in heads().items():
+        if not tested(b, sha):
+            enqueue(b, "new commit")
 
 
 def slug(s):
@@ -139,7 +155,8 @@ def do_run(job):
         return meta
 
     if not os.path.isfile(os.path.join(REPO, "test", "headless", "Makefile")):
-        return finish("no-headless", note="This commit has no headless build (test/headless): merge main into the branch.")
+        return finish("no-headless", note="This commit has no headless build (test/headless): it's from before the headless tests, or "
+                                             "its branch hasn't merged them yet.")
     if not os.path.isfile(DAT):
         return finish("error", note=f"No ftl.dat: put your copy at {DAT} (the data folder).")
 
@@ -205,10 +222,7 @@ def prune():
 def poller():
     while True:
         try:
-            for b in BRANCHES:
-                sha = remote_head(b)
-                if sha and not tested(b, sha):
-                    enqueue(b, "new commit")
+            check_for_commits()
             last_poll.update(at=time.time(), error=None)
         except Exception as e:
             last_poll.update(at=time.time(), error=str(e))
@@ -241,10 +255,11 @@ class Handler(BaseHTTPRequestHandler):
             runs = all_runs()
             with lock:
                 cur, qd = (dict(current) if current else None), list(queue)
-            latest = {b: next((m for m in runs if m["branch"] == b), None) for b in BRANCHES}
+            branches = last_poll["branches"] or [b for b in BRANCHES if b != "*"]
+            latest = {b: next((m for m in runs if m["branch"] == b), None) for b in branches}
             return self.send(200, {
                 "current": cur, "queue": qd, "latest": latest, "dat": os.path.isfile(DAT),
-                "poll": last_poll, "config": {"repo": REPO_URL, "branches": BRANCHES, "poll_minutes": POLL_MINUTES,
+                "poll": last_poll, "config": {"repo": REPO_URL, "branches": branches, "poll_minutes": POLL_MINUTES,
                                               "seeds": SEEDS, "jobs": JOBS}})
         if parts == ["api", "runs"]:
             return self.send(200, all_runs()[: int(q.get("limit", ["100"])[0])])
@@ -288,12 +303,11 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
             branch = body.get("branch")
-            if branch not in BRANCHES:
+            if branch not in last_poll["branches"] and branch not in BRANCHES:
                 return self.send(400, {"error": f"unknown branch {branch}"})
             return self.send(200, {"queued": enqueue(branch, "run button")})
         if parts == ["api", "poll"]:
-            threading.Thread(target=lambda: [enqueue(b, "new commit") for b in BRANCHES
-                                             if (s := remote_head(b)) and not tested(b, s)], daemon=True).start()
+            threading.Thread(target=check_for_commits, daemon=True).start()
             return self.send(200, {"ok": True})
         self.send(404, {"error": "not found"})
 

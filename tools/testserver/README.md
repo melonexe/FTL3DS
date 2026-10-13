@@ -2,8 +2,8 @@
 
 A small Docker app that tests every new commit automatically and shows the results in a web page:
 
-1. Every few minutes it checks the GitHub branches it watches (`main` and `experimental/stereo-3d`
-   by default) for new commits. A **Run now** button tests a branch on demand.
+1. It watches a repository's branches for new commits: your local repository (every commit tested
+   as soon as you make it, no pushing) or GitHub. A **Run now** button tests a branch on demand.
 2. It builds the **headless game** ([`test/headless`](../../test/headless)) from that commit: the
    real game, test build included, compiled for Linux with nothing drawn or played and a simulated
    clock, so a test that takes a minute in Azahar takes a second or two. A branch made before the
@@ -22,7 +22,27 @@ What it can't check: anything you'd see or hear. Screenshots are skipped, there'
 timings are simulated. The Azahar runner (`tools/test/run_all.ps1`) and the console are still the
 place for those.
 
-## On TrueNAS SCALE (24.10 or later)
+## On this PC (Docker Desktop)
+
+Tests every commit in your local repository, on every branch, within a minute of you making it.
+
+1. Install Docker Desktop and start it (it needs WSL2: if it says it can't start, run
+   `wsl --update` in an administrator PowerShell). In its settings, **Start Docker Desktop when you
+   sign in** keeps the server running.
+2. In `tools/testserver/`, copy `.env.example` to `.env` and set the paths: your repository, the
+   folder holding `ftl.dat` (e.g. FTL's Steam folder) and where results go (default `./data`).
+   Git ignores both `.env` and `data/`.
+3. From `tools/testserver/`: `docker compose -f docker-compose.local.yml up -d --build`
+4. Open http://localhost:8088.
+
+Your repository and FTL's folder are mounted read-only: the server tests from its own clone, so it
+never touches your working copy. After changing the server itself, run step 3 again.
+To stop it: `docker compose -f docker-compose.local.yml down`.
+
+## On a home server, e.g. TrueNAS SCALE (24.10 or later)
+
+This version watches GitHub instead, so it tests what you've pushed.
+
 
 1. Make a dataset for it, e.g. `pool/apps/ftl3ds-tests`, and copy your `ftl.dat` into it (from your
    FTL folder: Steam > right-click FTL > Manage > Browse local files).

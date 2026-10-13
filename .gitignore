@@ -44,3 +44,7 @@ tools/cia/icon.png
 # Local notes
 DISCORD_SETUP.md
 FTL2CIA.log
+
+# The test server on this PC: its paths and its results
+tools/testserver/.env
+tools/testserver/data/

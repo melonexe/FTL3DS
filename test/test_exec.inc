@@ -43,7 +43,8 @@
 //                                     manned_<system> (1 if someone is at its station),
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
 //                                     dodges (shots that have missed our ship), cloaked,
-//                                     power_<system> (working power), hiddenrooms (our
+//                                     power_<system> (working power), hangarfocus, difficulty,
+//                                     hiddenrooms (our
 //                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
 //                                     store has a picture for it), enemyguns
 //                                     (enemy weapons powered)
@@ -87,6 +88,8 @@
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
         if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
         if (!strcmp(n, "cloaked")) return ps->cloakTime > 0.0f;
+        if (!strcmp(n, "hangarfocus")) return sHangarFocus;  // HG_*: 0 prev ship, 1 next, 2-4 types A-C, 5-7 easy-hard, 8 back, 9 start
+        if (!strcmp(n, "difficulty")) return sDifficulty;
         if (!strncmp(n, "power_", 6)) {  // a system's working power: -1 no such system
             int si = ship_find_system(ps, system_from_name(n + 6));
             return si >= 0 ? ship_system_power(ps, si) : -1;

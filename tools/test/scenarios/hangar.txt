@@ -4,8 +4,8 @@ seed 2
 at 1 shot title
 at 2 do tap 160 60
 at 3 expect menu == 2
-at 3 do key RIGHT
-at 4 do key RIGHT
+at 3 do key R
+at 4 do key R
 at 5 do key X
 at 6 do tap 250 170
 at 7 shot hangar_choice

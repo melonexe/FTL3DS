@@ -659,9 +659,10 @@ int ship_install_system(Ship* s, FtlDat* dat, const SystemDef* src) {
         sys->ionLimit = -1;
         sys->eventCap = -1;
         const Room* room = &s->rooms[sys->room];
-        if (d->slot >= 0 && d->slot < room->w * room->h) {
-            sys->stationX = room->x + d->slot % room->w;
-            sys->stationY = room->y + d->slot / room->w;
+        int slot = d->slot >= room->w * room->h ? 0 : d->slot;  // a slot the room hasn't got: its first tile (xftl)
+        if (slot >= 0) {
+            sys->stationX = room->x + slot % room->w;
+            sys->stationY = room->y + slot / room->w;
         }
         if (d->img[0]) {
             snprintf(path, sizeof(path), "img/ship/interior/%s.png", d->img);

@@ -1,6 +1,6 @@
 # The crew tab's quick bar: a button for each system you trigger yourself, then the drones. The
 # Stealth Cruiser's first is cloaking (x 116-138, y 20-42): tapping it cloaks the ship, as its SYS
-# tab card does. (Taps during a screenshot's hold are dropped, so the tap comes after it.)
+# tab card does, and cloaking adds a flat 60% evasion (wiki: Cloaking). (Taps during a screenshot's hold are dropped, so the tap comes after it.)
 ship PLAYER_SHIP_STEALTH
 enemy REBEL_FAT
 enemyfire 0
@@ -9,5 +9,6 @@ at 1 expect cloaked == 0
 at 1 shot quick_bar
 at 3 do tap 127 31
 at 3.5 expect cloaked == 1
+at 3.5 expect evasion >= 60
 at 4 shot cloaked
 at 6 done

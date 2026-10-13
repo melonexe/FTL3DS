@@ -63,13 +63,19 @@ unlocks and achievements work as in FTL. There's also a SANDBOX mode (any ship w
 drones and augments; no unlocks). Numbers come from the FTL wiki, Mike Hopley's measurements and
 xftl's reverse engineering; the few no source gives are marked as our own choice in the code.
 
+### Experimental: stereoscopic 3D
+
+The [`experimental/stereo-3d`](https://github.com/melonexe/FTL3DS/tree/experimental/stereo-3d)
+branch makes more of the 3D slider: shields become glassy domes bulging out of the screen, shots
+arc out towards you, and drones and explosions float in front of the ships. It isn't in the
+releases yet; build it from that branch (see [BUILDING.md](BUILDING.md)) and tell us on Discord how
+it looks on your console.
+
 ## What's missing
 
 - **The tutorial.**
 - **The secret Crystal sector** (so the Ancestry achievement can't be earned).
 - **Some event scripting:**
-  - `<boarders>`: events where enemy boarders beam aboard (58 uses in FTL's events) do nothing.
-  - `<status>`: events that limit or damage your systems for the fight (79 uses) are ignored.
   - `<crew>` and `<weaponOverride>` on event ships: their scripted crew and weapons are
     generated randomly instead.
   - `<fleet>` backdrops (the rebel fleet behind you), `<repair>` and `<secretSector>`.
@@ -84,14 +90,17 @@ trained crew in stores, a few rates), and play is mostly by touch.
 
 The touchscreen has four tabs (tap them, or press X): **CREW** (your ship map, crew bar, door and
 station buttons), **FIGHT** (the enemy map for targeting, a card per weapon, AUTO fire), **SYS**
-(drones and special systems) and **POWER** (the reactor and every system's bars). Between fights
-the top-left buttons are SHIP and JUMP.
+(drones and special systems) and **POWER** (the reactor and every system's bars). In a run, the
+top-left buttons are SHIP (upgrades and equipment) and JUMP. As in FTL, JUMP needs the FTL drive
+charged, the engines powered and someone at a working helm; tapping it otherwise says what's wrong.
 
 | Input | Action |
 |---|---|
 | Tap a crew member (map or crew bar), or drag a box | Select them |
 | Tap a room, or another crew member's tile | Send the selected crew there (station first, then the nearest free tile) |
-| Tap a door | Hold it open / close it (airlocks vent the room to space) |
+| Tap a door | Hold it open / close it (airlocks vent the room to space), even while paused |
+| Open all doors button (CREW tab) | Opens the inside doors; tap again to open the airlocks too |
+| Close all doors button | Closes every door |
 | Tap a weapon card, then an enemy room | Power the weapon and target that room |
 | Beams: tap the card, then drag across the enemy | Set the beam's path; rooms it will hit turn red |
 | Tap a drone card or a system card (SYS tab) | Deploy / activate it |
@@ -119,7 +128,7 @@ then, for CIAs and releases (Git Bash, with makerom and bannertool in `tools/cia
 
 ```
 sh tools/cia/build_cia.sh "<path to ftl.dat>"     # personal CIA, your ftl.dat inside
-sh tools/release.sh 0.1.1                         # release zip: FTL2CIA, public CIA, .3dsx
+sh tools/release.sh <version>                     # release zip: FTL2CIA, public CIA, .3dsx
 ```
 
 `.gitignore` keeps `ftl.dat` (any letter case), romfs folders, CIAs, builds and anything else made

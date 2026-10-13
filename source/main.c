@@ -237,11 +237,11 @@ static void update_visibility(const Ship* player, const CrewSet* crew, const Shi
     sVis.ship[0] = player;
     sVis.ship[1] = enemy;
     for (int r = 0; r < player->roomCount; r++) sVis.hidden[0][r] = level < 1;
+    // Without sensors, only the rooms our crew are standing in (not where they're headed: that
+    // would show a room before anyone gets there).
     for (int i = 0; i < crew->count; i++) {
-        int r = ship_room_at(player, crew->crew[i].destX, crew->crew[i].destY);
-        int r2 = ship_room_at(player, (int)floorf(crew->crew[i].x / TILE), (int)floorf(crew->crew[i].y / TILE));
+        int r = ship_room_at(player, (int)floorf(crew->crew[i].x / TILE), (int)floorf(crew->crew[i].y / TILE));
         if (r >= 0) sVis.hidden[0][r] = false;
-        if (r2 >= 0) sVis.hidden[0][r2] = false;
     }
     if (enemy) {
         for (int r = 0; r < enemy->roomCount; r++) sVis.hidden[1][r] = level < 2;

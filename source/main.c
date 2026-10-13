@@ -6177,6 +6177,7 @@ int main(void) {
                       (sInRun && (sRun.view.active || sMapOpen || sSectorMapOpen || sStoreOpen || sShipOpen));
         // Surrender and escape (xftl ShipAI): checked as the enemy's hull drops; an escaping ship
         // charges its FTL while its piloting and engines work, and leaves when done.
+        combat.enemyEscaping = sEscapeLeft >= 0.0f;  // an escaping enemy stops powering weapons and drones
         if (sInRun && !frozen && haveEnemy && combat.result == COMBAT_FIGHTING && foe && foe->hullHp > 0) {
             if (sSurrenderHp > 0 && foe->hullHp <= sSurrenderHp) {
                 sSurrenderHp = 0;

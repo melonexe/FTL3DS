@@ -1,0 +1,14 @@
+# An ion storm halves both reactors: the enemy re-plans its power (FTL's CheckPowerLevels, xftl
+# doc/ship-ai) and still shares it between weapons and defences, so it keeps shooting. Before, the
+# storm switched its weapons off for good: it never fired (0 damage in 31 of 31 seeds). As in FTL,
+# weapons and drones get first pick each round, so its shields may be left with too little for a
+# layer.
+ship 1
+enemy REBEL_FAT
+env storm
+tab fight
+seed 3
+at 5 expect enemyguns >= 1
+at 40 log state
+at 40 expect hull < 30
+at 41 done

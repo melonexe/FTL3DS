@@ -86,6 +86,7 @@ typedef struct {
     float shieldFlash[2];
     bool autofire;  // player weapons keep their target after firing
     bool enemyHoldFire;  // testing: the enemy keeps its weapons off
+    bool enemyEscaping;  // its FTL is charging to get away (set by the game each frame)
     int enemyBoardings;  // times the enemy has sent boarders this fight
     float boardTimer;
     bool crewKilled;     // won by killing the enemy crew rather than destroying the ship

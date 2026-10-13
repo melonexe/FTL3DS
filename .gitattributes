@@ -1,0 +1,4 @@
+# Built and run on Linux (also from a Windows checkout mounted into Docker): Unix line endings.
+test/headless/** text eol=lf
+tools/test/run_headless.py text eol=lf
+tools/testserver/** text eol=lf

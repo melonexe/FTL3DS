@@ -5,9 +5,10 @@ full runs from the hangar to the rebel flagship, on the 3DS's two screens.
 
 An unofficial fan project, not affiliated with or endorsed by Subset Games. FTL: Faster Than Light
 is theirs; buy it if you haven't. This repository contains **no FTL code or assets**: the game loads
-`ftl.dat` from your own copy of FTL (1.6 or later) at runtime. The engine is written from the
-community-documented data formats and reverse-engineering notes, without decompiling the original
-game.
+`ftl.dat` from your own copy of FTL (1.6 or later) at runtime. The engine is written from
+community-documented data formats and reverse-engineering notes (xftl, the FTL wiki). Some gameplay
+numbers were then checked against the game's executable, so they match FTL exactly. No FTL code or
+assets are included.
 
 ## Work in progress
 

@@ -4811,6 +4811,53 @@ enum { HG_NONE = -1, HG_PREV, HG_NEXT, HG_TYPE_A, HG_TYPE_B, HG_TYPE_C, HG_EASY,
 static float hg_type_x(int t) { return BOT_W * 0.5f - 76 + t * 52; }
 static float hg_diff_x(int d) { return 8 + d * 102; }
 
+// The D-pad's focus: a yellow border round the button that A presses (lit buttons show what's
+// chosen, which isn't always the same thing).
+static void focus_border(float x, float y, float w, float h) {
+    const u32 c = C2D_Color32(255, 214, 64, 255);
+    C2D_DrawRectSolid(x - 2, y - 2, 0, w + 4, 2, c);
+    C2D_DrawRectSolid(x - 2, y + h, 0, w + 4, 2, c);
+    C2D_DrawRectSolid(x - 2, y, 0, 2, h, c);
+    C2D_DrawRectSolid(x + w, y, 0, 2, h, c);
+}
+
+static int sHangarFocus = HG_START;  // the button the D-pad is on
+
+// Where each hangar button is drawn.
+static void hg_rect(int b, float* x, float* y, float* w, float* h) {
+    if (b == HG_PREV || b == HG_NEXT) {
+        *x = b == HG_PREV ? 4 : BOT_W - 56, *y = HG_MINI_Y + 30, *w = 52, *h = 32;
+    } else if (b >= HG_TYPE_A && b <= HG_TYPE_C) {
+        *x = hg_type_x(b - HG_TYPE_A), *y = HG_TYPE_Y, *w = 48, *h = 26;
+    } else if (b >= HG_EASY && b <= HG_HARD) {
+        *x = hg_diff_x(b - HG_EASY), *y = HG_DIFF_Y, *w = 98, *h = 28;
+    } else if (b == HG_BACK) {
+        *x = 4, *y = HG_BTN_Y, *w = 96, *h = 36;
+    } else {
+        *x = BOT_W - 170, *y = HG_BTN_Y, *w = 166, *h = 36;
+    }
+}
+
+// The nearest button from `from` in direction (dx, dy), favouring ones in line; `from` if none.
+// Layouts the ship hasn't got are skipped.
+static int hg_focus_move(int from, int dx, int dy) {
+    float fx, fy, fw, fh;
+    hg_rect(from, &fx, &fy, &fw, &fh);
+    float cx = fx + fw * 0.5f, cy = fy + fh * 0.5f, best = 1e9f;
+    int pick = from;
+    for (int b = HG_PREV; b <= HG_START; b++) {
+        if (b == from || (b >= HG_TYPE_A && b <= HG_TYPE_C && sFam[sHangarFam][b - HG_TYPE_A] < 0)) continue;
+        float x, y, w, h;
+        hg_rect(b, &x, &y, &w, &h);
+        float ddx = x + w * 0.5f - cx, ddy = y + h * 0.5f - cy;
+        float along = dx ? ddx * dx : ddy * dy, across = dx ? fabsf(ddy) : fabsf(ddx);
+        if (along <= 1.0f) continue;  // not that way
+        float score = along + 2.0f * across;
+        if (score < best) best = score, pick = b;
+    }
+    return pick;
+}
+
 static int hangar_touch(int px, int py) {
     if (py >= HG_MINI_Y && py < HG_MINI_Y + 92) {
         if (px < 60) return HG_PREV;
@@ -4882,6 +4929,11 @@ static void draw_hangar(const ShipBlueprint* bps) {
     for (int d = 0; d < 3; d++) ftl_button(hg_diff_x(d), HG_DIFF_Y, 98, 28, d == sDifficulty, diffs[d]);
     ftl_button(4, HG_BTN_Y, 96, 36, false, "BACK");
     ftl_button(BOT_W - 170, HG_BTN_Y, 166, 36, !locked, locked ? "LOCKED" : "START");
+    {
+        float fx, fy, fw, fh;
+        hg_rect(sHangarFocus, &fx, &fy, &fw, &fh);
+        focus_border(fx, fy, fw, fh);
+    }
 }
 
 
@@ -5123,6 +5175,8 @@ static void draw_options(void) {
     draw_volume_row(OPT_Y, "MUSIC", sMusicVol, sMenuSel == OPT_MUSIC);
     draw_volume_row(OPT_Y + OPT_PITCH, "SOUND", sSfxVol, sMenuSel == OPT_SFX);
     ftl_button(BOT_W / 2 - 60, OPT_Y + 2 * OPT_PITCH + 20, 120, 34, sMenuSel == OPT_BACK, "BACK");
+    if (sMenuSel == OPT_BACK) focus_border(BOT_W / 2 - 60, OPT_Y + 2 * OPT_PITCH + 20, 120, 34);
+    else focus_border(6, OPT_Y + sMenuSel * OPT_PITCH, BOT_W - 12, 32);
 }
 
 static int options_touch(int px, int py, int* delta) {
@@ -5143,6 +5197,7 @@ static void draw_pause(void) {
     C2D_DrawRectSolid(0, 0, 0, BOT_W, BOT_H, C2D_Color32(10, 13, 24, 255));
     draw_text(8, 6, 0.55f, C2D_Color32(255, 220, 120, 255), "PAUSED");
     for (int i = 0; i < PAUSE_COUNT; i++) ftl_button(BOT_W / 2 - 90, 36 + i * 48, 180, 38, i == sMenuSel, items[i]);
+    if (sMenuSel >= 0 && sMenuSel < PAUSE_COUNT) focus_border(BOT_W / 2 - 90, 36 + sMenuSel * 48, 180, 38);
 }
 
 static int pause_touch(int px, int py) {
@@ -5639,9 +5694,15 @@ int main(void) {
                 }
             } else if (sMenu == MENU_HANGAR) {
                 int h = touched ? hangar_touch(touch.px, touch.py) : HG_NONE;
-                if (down & KEY_DLEFT) h = HG_PREV;
-                if (down & KEY_DRIGHT) h = HG_NEXT;
-                if (down & KEY_A) h = HG_START;
+                if (h != HG_NONE) sHangarFocus = h;  // a tapped button takes the focus
+                if (down & KEY_DLEFT) sHangarFocus = hg_focus_move(sHangarFocus, -1, 0);
+                if (down & KEY_DRIGHT) sHangarFocus = hg_focus_move(sHangarFocus, 1, 0);
+                if (down & KEY_DUP) sHangarFocus = hg_focus_move(sHangarFocus, 0, -1);
+                if (down & KEY_DDOWN) sHangarFocus = hg_focus_move(sHangarFocus, 0, 1);
+                if (down & (KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN)) sound_play("hoverBeep");
+                if (down & KEY_L) h = HG_PREV;
+                if (down & KEY_R) h = HG_NEXT;
+                if (down & KEY_A) h = sHangarFocus;
                 if (down & KEY_B) h = HG_BACK;
                 if (down & KEY_Y) h = HG_EASY + (sDifficulty + 1) % 3;
                 if (down & KEY_X)

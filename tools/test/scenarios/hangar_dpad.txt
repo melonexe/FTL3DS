@@ -1,0 +1,20 @@
+# The hangar by D-pad: the yellow focus starts on START; UP goes to the difficulty above it (HARD),
+# LEFT to NORMAL, and A picks it. L/R change ship.
+title 1
+seed 2
+at 1 do tap 160 60
+at 2 expect menu == 2
+at 2 expect hangarfocus == 9
+at 2.5 do key UP
+at 3 expect hangarfocus == 7
+at 3.5 do key LEFT
+at 4 expect hangarfocus == 6
+at 4.5 do key A
+at 5 expect difficulty == 1
+at 5.5 do key LEFT
+at 6 expect hangarfocus == 5
+at 6.5 do key A
+at 7 expect difficulty == 0
+at 7.5 do key UP
+at 8 shot focus
+at 9 done

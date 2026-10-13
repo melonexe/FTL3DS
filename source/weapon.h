@@ -52,6 +52,7 @@ typedef struct {
     int speed;         // flight speed in the game's units
     int target;        // DRONE_TARGET_*
     char image[32];    // img/ship/drones/<image>_base.png, _on.png, _charged.png
+    char icon[16];     // img/systemUI/weapbox_icon_D_<icon>.png, FTL's 26x26 drone icon
     const WeaponDef* weapon;  // what it fires, if anything
 } DroneDef;
 

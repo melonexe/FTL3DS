@@ -43,7 +43,8 @@
 //                                     manned_<system> (1 if someone is at its station),
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
 //                                     dodges (shots that have missed our ship), hiddenrooms (our
-//                                     rooms we can't see into), enemyguns
+//                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
+//                                     store has a picture for it), enemyguns
 //                                     (enemy weapons powered)
 //   done                              log DONE and quit
 // Every frame, test/invariants.c also checks the rules the game state must always obey and logs
@@ -84,6 +85,11 @@
         if (!strcmp(n, "ftl")) return sFtlCharge;
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
         if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
+        if (!strncmp(n, "droneart_", 9)) {  // 1 if the store has a picture for that drone blueprint
+            int ok = item_art(ITEM_DRONE, n + 9) != NULL;
+            item_art_clear();
+            return ok;
+        }
         if (!strcmp(n, "hiddenrooms")) {  // our rooms we can't see into (sensors down, nobody there)
             int k = 0;
             for (int r = 0; r < ps->roomCount; r++) k += room_hidden(ps, r);

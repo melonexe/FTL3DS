@@ -196,6 +196,7 @@ static void scan(const char* xml) {
         child_str(p, limit, "target", buf, sizeof(buf));
         d->target = !strcmp(buf, "LASERS") ? DRONE_TARGET_LASERS : !strcmp(buf, "DRONES") ? DRONE_TARGET_DRONES : DRONE_TARGET_MISSILES;
         child_str(p, limit, "droneImage", d->image, sizeof(d->image));
+        child_str(p, limit, "iconImage", d->icon, sizeof(d->icon));
         child_str(p, limit, "weaponBlueprint", sDroneWeapon[idx], sizeof(sDroneWeapon[idx]));
         const char* e;
         const char* t = xml_find_tag_before(p, limit, "short", &e);

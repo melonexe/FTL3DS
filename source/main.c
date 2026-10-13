@@ -3273,9 +3273,19 @@ static const ItemArt* item_art(int kind, const char* name) {
             a->rotate = true;
         }
     } else if (kind == ITEM_DRONE) {
+        // Its sprite; for the drones that walk inside (anti-personnel, repair) their crew figure;
+        // failing both (boarding, ion intruder, shield drones), FTL's drone icon.
         const DroneDef* d = drone_find(name);
-        if (d) {
+        if (d && d->image[0]) {
             snprintf(path, sizeof(path), "img/ship/drones/%s_base.png", d->image);
+            load_crop(&a->tex, path, 0, 0, 0, 0, false);
+        }
+        if (d && !a->tex.loaded && (d->type == DRONE_BATTLE || d->type == DRONE_CREW_REPAIR)) {
+            snprintf(path, sizeof(path), "img/people/%s_base.png", d->type == DRONE_BATTLE ? "battle" : "repair");
+            load_crop(&a->tex, path, 0, 0, 35, 35, false);  // first walking-down frame, as for crew
+        }
+        if (d && !a->tex.loaded && d->icon[0]) {
+            snprintf(path, sizeof(path), "img/systemUI/weapbox_icon_D_%s.png", d->icon);
             load_crop(&a->tex, path, 0, 0, 0, 0, false);
         }
     } else if (kind == ITEM_CREW) {

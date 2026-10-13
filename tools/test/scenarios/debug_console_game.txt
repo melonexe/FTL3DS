@@ -1,0 +1,22 @@
+# The debug console in a fight: SELECT steps through its pages (the test build starts with
+# CHEATS); the fight starting is in the log.
+seed 1
+enemy REBEL_FAT
+weapons on
+at 1 do key SELECT
+at 1.5 expect console == 1
+at 2 do key SELECT
+at 2.5 shot memory
+at 4.5 do key SELECT
+at 5 shot performance
+at 7 do key SELECT
+at 7.5 shot rooms
+at 9.5 do key SELECT
+at 10 shot systems
+at 12 do key SELECT
+at 12.5 expect console == 6
+at 12.5 expect loglines >= 1
+at 12.5 shot log
+at 14.5 do key SELECT
+at 15 expect console == 0
+at 15 done

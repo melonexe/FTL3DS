@@ -44,6 +44,8 @@
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
 //                                     dodges (shots that have missed our ship), cloaked,
 //                                     power_<system> (working power), hangarfocus, difficulty,
+//                                     console (debug console page), debugconsole (its option),
+//                                     loglines (lines in its log),
 //                                     hiddenrooms (our
 //                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
 //                                     store has a picture for it), enemyguns
@@ -90,6 +92,9 @@
         if (!strcmp(n, "cloaked")) return ps->cloakTime > 0.0f;
         if (!strcmp(n, "hangarfocus")) return sHangarFocus;  // HG_*: 0 prev ship, 1 next, 2-4 types A-C, 5-7 easy-hard, 8 back, 9 start
         if (!strcmp(n, "difficulty")) return sDifficulty;
+        if (!strcmp(n, "console")) return sDcMode;  // DC_*: 0 off, 1 cheats, 2 memory, 3 performance, 4 rooms, 5 systems, 6 log
+        if (!strcmp(n, "debugconsole")) return sDebugConsole;  // the OPTIONS setting
+        if (!strcmp(n, "loglines")) return dbglog_count();
         if (!strncmp(n, "power_", 6)) {  // a system's working power: -1 no such system
             int si = ship_find_system(ps, system_from_name(n + 6));
             return si >= 0 ? ship_system_power(ps, si) : -1;

@@ -1,0 +1,33 @@
+# The debug console: OPTIONS has it off at first; DOWN twice then A turns it on. In game SELECT
+# steps through its pages (the test build starts with CHEATS) and comes back round to none.
+title 1
+seed 1
+at 1 do tap 160 150
+at 2 expect menu == 3
+at 2 expect debugconsole == 0
+at 2.5 do key DOWN
+at 3 do key DOWN
+at 3.5 do key A
+at 4 expect debugconsole == 1
+at 4.5 do key A
+at 5 expect debugconsole == 0
+at 5.5 do key A
+at 6 expect debugconsole == 1
+at 6.5 shot options
+at 8.5 do key SELECT
+at 9 expect console == 1
+at 9.5 do key SELECT
+at 10 expect console == 2
+at 10.5 shot memory
+at 12.5 do key SELECT
+at 13 expect console == 3
+at 13.5 do key SELECT
+at 14 expect console == 4
+at 14.5 do key SELECT
+at 15 expect console == 5
+at 15.5 do key SELECT
+at 16 expect console == 6
+at 16 expect loglines >= 0
+at 16.5 do key SELECT
+at 17 expect console == 0
+at 17 done

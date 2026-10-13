@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "anim.h"
+#include "dbglog.h"
 #include "combat.h"
 #include "crew.h"
 #include "life.h"
@@ -3870,9 +3871,86 @@ static unsigned ship_texture_bytes(const Ship* s) {
 static unsigned sMinLinearFree = 0xFFFFFFFFu;  // lowest seen this session
 static bool sShowMemory;                        // test.txt "memory 1"
 
-// Memory readout on the top screen while the debug menu is open: the 3DS's two heaps (normal and
-// the GPU/DSP-visible linear one), what textures and sounds hold, and each ship's share.
-static void draw_memory_top(const Ship* player, const Ship* enemy) {
+// ---- The debug console (OPTIONS > DEBUG CONSOLE, off by default) ----
+// SELECT steps through its pages on the top screen, then back to none. The test build always has
+// it, with the cheat menu (on the touch screen) as its first page.
+enum { DC_OFF, DC_CHEATS, DC_MEMORY, DC_PERF, DC_ROOMS, DC_SYSTEMS, DC_LOG, DC_COUNT };
+static const char* const sDcNames[DC_COUNT] = {"", "CHEATS", "MEMORY", "PERFORMANCE", "ROOMS", "SYSTEMS", "LOG"};
+static bool sDebugConsole;  // the option (settings.txt "debug")
+static int sDcMode;         // the page showing, DC_OFF for none
+
+static bool console_available(void) {
+#ifdef FTL_TEST
+    return true;
+#else
+    return sDebugConsole;
+#endif
+}
+
+// The page after `m`: the cheat menu is only in the test build.
+static int console_next(int m) {
+    m = (m + 1) % DC_COUNT;
+#ifndef FTL_TEST
+    if (m == DC_CHEATS) m++;
+#endif
+    return m;
+}
+
+// Frame times for the PERFORMANCE page: the last DC_FRAMES frames, in milliseconds.
+#define DC_FRAMES 100
+static float sDcFrameMs[DC_FRAMES], sDcCpuMs, sDcGpuMs;
+static int sDcFrameAt;
+
+static void console_frame(float ms) {
+    sDcFrameMs[sDcFrameAt] = ms;
+    sDcFrameAt = (sDcFrameAt + 1) % DC_FRAMES;
+    sDcCpuMs = C3D_GetProcessingTime();
+    sDcGpuMs = C3D_GetDrawingTime();
+}
+
+// Logs what has changed since last frame: fights starting and ending, beacons and sectors, and
+// each new low in free linear memory once it's under 8 MB.
+static void console_watch(const Combat* c, const Ship* foe) {
+    static const Ship* lastFoe;
+    static int result = -1, sector = -1, beacon = -1;
+    static unsigned lowMB = 0xFFFFFFFFu;
+    if (foe != lastFoe && foe) dbglog("fight: %s, hull %d", foe->bp->name, foe->hullHp);
+    lastFoe = foe;
+    if (c->result != result && result >= 0) {
+        if (c->result == COMBAT_WON) dbglog(c->crewKilled ? "won: enemy crew dead" : "won: enemy destroyed");
+        if (c->result == COMBAT_LOST) dbglog("lost the ship");
+    }
+    result = c->result;
+    if (sInRun && sRun.sector != sector) dbglog("sector %d: %s", sRun.sector + 1, sRun.sectorType);
+    else if (sInRun && sRun.current != beacon) dbglog("jumped to beacon %d", sRun.current);
+    sector = sInRun ? sRun.sector : -1;
+    beacon = sInRun ? sRun.current : -1;
+    unsigned mb = sMinLinearFree == 0xFFFFFFFFu ? lowMB : sMinLinearFree >> 20;
+    if (mb < lowMB && mb < 8) dbglog("linear memory low: %u MB free", mb);
+    if (mb < lowMB) lowMB = mb;
+}
+
+#define DC_PITCH 12
+#define DC_SCALE 0.4f
+static const u32 kDcText = 0xFFEBEBEB, kDcDim = 0xFFAFA096, kDcWarn = 0xFF5A78FF;  // ABGR
+
+// A page's box at the bottom right of the top screen with its name; returns where line 0 goes.
+static void console_box(float w, int lines, float* x, float* y) {
+    float h = 16 + lines * DC_PITCH + 2;
+    *x = TOP_W - w - 2, *y = TOP_H - h - 2;
+    C2D_DrawRectSolid(*x, *y, 0, w, h, C2D_Color32(10, 14, 24, 230));
+    C2D_DrawRectSolid(*x, *y, 0, w, 1, C2D_Color32(80, 90, 110, 255));
+    char head[40];
+    snprintf(head, sizeof(head), "DEBUG: %s", sDcNames[sDcMode]);
+    draw_text(*x + 4, *y + 2, DC_SCALE, C2D_Color32(255, 220, 120, 255), head);
+    const char* hint = "SELECT: next";
+    draw_text(*x + w - 4 - font_width(DC_SCALE, hint), *y + 2, DC_SCALE, kDcDim, hint);
+    *x += 4, *y += 16;
+}
+
+// Memory: the 3DS's two heaps (normal and the GPU/DSP-visible linear one), what textures and
+// sounds hold, and each ship's share.
+static void console_memory(const Ship* player, const Ship* enemy) {
     struct mallinfo mi = mallinfo();
     unsigned linTotal = envGetLinearHeapSize(), linFree = linearSpaceFree();
     unsigned texB, texN, sndLin, sndHeap;
@@ -3880,16 +3958,156 @@ static void draw_memory_top(const Ship* player, const Ship* enemy) {
     texture_stats(&texB, &texN);
     sound_stats(&sndLin, &sndHeap, &sndN);
     const float MB = 1024.0f * 1024.0f;
-    char lines[8][64];
+    char lines[7][64];
     snprintf(lines[0], 64, "Heap %.1f / %.1f MB used", mi.uordblks / MB, envGetHeapSize() / MB);
     snprintf(lines[1], 64, "Linear %.1f / %.1f MB used", (linTotal - linFree) / MB, linTotal / MB);
-    snprintf(lines[2], 64, "Linear free low point %.1f MB", sMinLinearFree / MB);
+    snprintf(lines[2], 64, "Linear free low point %.1f MB", sMinLinearFree == 0xFFFFFFFFu ? linFree / MB : sMinLinearFree / MB);
     snprintf(lines[3], 64, "Textures %u: %.1f MB", texN, texB / MB);
     snprintf(lines[4], 64, "  our ship %.1f MB, enemy %.1f MB", ship_texture_bytes(player) / MB, ship_texture_bytes(enemy) / MB);
     snprintf(lines[5], 64, "Sounds %d: %.1f MB linear, %.1f heap", sndN, sndLin / MB, sndHeap / MB);
     snprintf(lines[6], 64, "VRAM free %.1f MB", vramSpaceFree() / MB);
-    C2D_DrawRectSolid(TOP_W - 214, TOP_H - 100, 0, 212, 98, C2D_Color32(10, 14, 24, 230));
-    for (int i = 0; i < 7; i++) draw_text(TOP_W - 210, TOP_H - 98 + i * 13, 0.38f, C2D_Color32(235, 235, 235, 255), lines[i]);
+    float x, y;
+    console_box(212, 7, &x, &y);
+    for (int i = 0; i < 7; i++) draw_text(x, y + i * DC_PITCH, DC_SCALE, i == 2 && linFree < 4u << 20 ? kDcWarn : kDcText, lines[i]);
+}
+
+// Performance: frame rate, the slowest recent frame, render times and what's flying about, over a
+// graph of the last DC_FRAMES frame times (the line is 60 fps).
+static void console_perf(const Combat* c) {
+    float sum = 0.0f, worst = 0.0f;
+    for (int i = 0; i < DC_FRAMES; i++) {
+        sum += sDcFrameMs[i];
+        if (sDcFrameMs[i] > worst) worst = sDcFrameMs[i];
+    }
+    float avg = sum / DC_FRAMES;
+    int shots = 0, fx = 0, beams = 0, drones = 0;
+    for (int i = 0; c && i < MAX_SHOTS; i++) shots += c->shots[i].active;
+    for (int i = 0; c && i < MAX_EFFECTS; i++) fx += c->effects[i].active;
+    for (int i = 0; c && i < MAX_BEAMS; i++) beams += c->beams[i].active;
+    for (int i = 0; c && i < MAX_DRONE_ENTITIES; i++) drones += c->droneEnts[i].active;
+    char lines[4][64];
+    snprintf(lines[0], 64, "%.0f fps, frame %.1f ms, worst %.0f ms", avg > 0.0f ? 1000.0f / avg : 0.0f, avg, worst);
+    snprintf(lines[1], 64, "Render: CPU %.1f ms, GPU %.1f ms", sDcCpuMs, sDcGpuMs);
+    if (c) snprintf(lines[2], 64, "Shots %d, beams %d, drones %d", shots, beams, drones);
+    else snprintf(lines[2], 64, "No fight");
+    snprintf(lines[3], 64, "Effects %d", fx);
+    const float GH = 30.0f;  // graph height: 0-50 ms
+    float x, y;
+    console_box(212, 4, &x, &y);
+    // The graph sits above the box, in its own backing.
+    float gx = x - 4, gy = y - 16 - GH - 4;
+    C2D_DrawRectSolid(gx, gy, 0, 212, GH + 4, C2D_Color32(10, 14, 24, 230));
+    for (int i = 0; i < DC_FRAMES; i++) {
+        float ms = sDcFrameMs[(sDcFrameAt + i) % DC_FRAMES], h = ms / 50.0f * GH;
+        if (h > GH) h = GH;
+        C2D_DrawRectSolid(gx + 6 + i * 2, gy + 2 + GH - h, 0, 2, h,
+                          ms > 18.0f ? C2D_Color32(230, 90, 70, 255) : C2D_Color32(110, 220, 100, 255));
+    }
+    C2D_DrawRectSolid(gx + 6, gy + 2 + GH - 16.7f / 50.0f * GH, 0, DC_FRAMES * 2, 1, C2D_Color32(255, 220, 120, 160));
+    for (int i = 0; i < 4; i++) draw_text(x, y + i * DC_PITCH, DC_SCALE, i == 0 && avg > 18.0f ? kDcWarn : kDcText, lines[i]);
+}
+
+// Rooms: each room's oxygen (red where crew suffocate), fires and breaches, written on the ship.
+static void console_rooms_on(const Ship* s, const Camera* cam) {
+    const float ox = (float)(s->xOffset * TILE), oy = (float)(s->yOffset * TILE);
+    for (int i = 0; i < s->roomCount; i++) {
+        const Room* r = &s->rooms[i];
+        float X, Y;
+        to_screen(cam, ox + (r->x + r->w * 0.5f) * TILE, oy + (r->y + r->h * 0.5f) * TILE, &X, &Y);
+        char a[24];
+        int f = life_room_fires(s, i), b = life_room_breaches(s, i);
+        int n = snprintf(a, sizeof(a), "%d%%", (int)(s->oxygen[i] + 0.5f));
+        if (f) n += snprintf(a + n, sizeof(a) - n, " F%d", f);
+        if (b) snprintf(a + n, sizeof(a) - n, " B%d", b);
+        float w = font_width(DC_SCALE, a);
+        C2D_DrawRectSolid(X - w * 0.5f - 2, Y - 6, 0, w + 4, 12, C2D_Color32(10, 14, 24, 200));
+        draw_text(X - w * 0.5f, Y - 6, DC_SCALE, s->oxygen[i] < LIFE_SUFFOCATE_BELOW || f || b ? kDcWarn : kDcText, a);
+    }
+}
+
+static void console_rooms(const Ship* ours, const Camera* cam, const Ship* other, const Camera* ocam) {
+    if (ours && cam) {
+        clip_top(0, ocam ? ENEMY_X : TOP_W);
+        console_rooms_on(ours, cam);
+    }
+    if (other && ocam) {
+        clip_top(ENEMY_X, TOP_W);
+        console_rooms_on(other, ocam);
+    }
+    clip_off();
+    const Ship* ships[2] = {ours, ocam ? other : NULL};
+    char lines[2][64];
+    int n = 0;
+    for (int k = 0; k < 2; k++)
+        if (ships[k])
+            snprintf(lines[n++], 64, "%s: O2 %.0f%%, fires %d, breaches %d", k ? "Them" : "Us", life_ship_oxygen(ships[k]),
+                     life_ship_fires(ships[k]), life_ship_breaches(ships[k]));
+    if (!n) snprintf(lines[n++], 64, "No ship here");
+    float x, y;
+    console_box(212, n, &x, &y);
+    for (int i = 0; i < n; i++) draw_text(x, y + i * DC_PITCH, DC_SCALE, kDcText, lines[i]);
+}
+
+// Systems: for each ship, reactor, evasion and shields, then each system's power / capacity with
+// damage, ion and who's manning it, then each weapon's charge.
+#define DC_SYS_LINES 15
+static int console_ship_lines(const Ship* s, const Combat* c, bool enemy, char lines[][48]) {
+    int n = 0;
+    snprintf(lines[n++], 48, "%s hull %d/%d, reactor %d free", enemy ? "THEM" : "US", s->hullHp, s->maxHull, ship_reactor_free(s));
+    snprintf(lines[n++], 48, "evade %d%%, shields %d%s", combat_evasion(s), s->shieldLayers,
+             enemy && c && c->enemyEscaping ? ", ESCAPING" : enemy && c && c->enemyHoldFire ? ", HOLD FIRE" : "");
+    for (int i = 0; i < s->systemCount && n < DC_SYS_LINES; i++) {
+        const ShipSystem* y = &s->systems[i];
+        int k = snprintf(lines[n], 48, "%-9s %d/%d", system_name(y->def->type), y->power, y->def->level);
+        if (y->damage) k += snprintf(lines[n] + k, 48 - k, " -%d", y->damage);
+        if (y->ionTimer > 0.0f) k += snprintf(lines[n] + k, 48 - k, " ion %.0fs", y->ionTimer);
+        if (y->manned) snprintf(lines[n] + k, 48 - k, " manned");
+        n++;
+    }
+    for (int i = 0; i < s->weaponCount && n < DC_SYS_LINES; i++) {
+        const WeaponSlot* w = &s->weapons[i];
+        snprintf(lines[n++], 48, "%.14s %s %.1f/%.1f", w->def->shortName[0] ? w->def->shortName : w->def->name,
+                 w->powered ? "on" : "off", w->charge, w->fullCharge);
+    }
+    return n;
+}
+
+static void console_systems(const Ship* ours, const Ship* foe, const Combat* c) {
+    static char lines[2][DC_SYS_LINES][48];
+    int n[2] = {0, 0};
+    if (ours) n[0] = console_ship_lines(ours, c, false, lines[0]);
+    if (foe) n[1] = console_ship_lines(foe, c, true, lines[1]);
+    if (!ours) snprintf(lines[0][n[0]++], 48, "No ship here");
+    float x, y;
+    console_box(TOP_W - 4, n[0] > n[1] ? n[0] : n[1], &x, &y);
+    for (int k = 0; k < 2; k++)
+        for (int i = 0; i < n[k]; i++)
+            draw_text_fit_left(x + k * 198, y + i * DC_PITCH, DC_SCALE, 192, i < 2 ? C2D_Color32(255, 220, 120, 255) : kDcText, lines[k][i]);
+}
+
+// Log: the newest line first.
+static void console_log(void) {
+    int n = dbglog_count();
+    float x, y;
+    console_box(TOP_W - 4, n ? n : 1, &x, &y);
+    if (!n) draw_text(x, y, DC_SCALE, kDcDim, "Nothing logged yet");
+    for (int i = 0; i < n; i++) draw_text_fit_left(x, y + i * DC_PITCH, DC_SCALE, TOP_W - 12, i ? kDcText : C2D_Color32(255, 255, 255, 255), dbglog_line(i));
+}
+
+// The page showing, on the top screen. Any argument may be NULL (in the menus, all are). `other`
+// is the ship in the right-hand view, `ocam` its camera (NULL when ours has the whole screen).
+static void draw_console_top(const Ship* ours, const Ship* foe, const Ship* other, const Camera* cam, const Camera* ocam,
+                             const Combat* c) {
+    int mode = sDcMode == DC_OFF && sShowMemory ? DC_MEMORY : sDcMode;
+    switch (mode) {
+        case DC_CHEATS:  // the cheats are on the touch screen; memory's handy alongside them
+        case DC_MEMORY: console_memory(ours, foe); break;
+        case DC_PERF: console_perf(c); break;
+        case DC_ROOMS: console_rooms(ours, cam, other, ocam); break;
+        case DC_SYSTEMS: console_systems(ours, foe, c); break;
+        case DC_LOG: console_log(); break;
+        default: break;
+    }
 }
 
 static void draw_debug(const char* shipName, const char* enemyName, const Combat* c) {
@@ -3970,6 +4188,7 @@ static bool slots_load(ShipSlots* sl, FtlDat* dat, const AnimDb* db, const NameL
         sl->loaded = false;
     }
     if (load_into(sl, dat, db, names, bp, err, errlen)) return true;
+    dbglog("ship %s failed: %s", bp->name, err);
     if (old) load_into(sl, dat, db, names, old, err, errlen);  // keep playing the previous ship
     return false;
 }
@@ -4464,6 +4683,7 @@ static void settings_load(void) {
             if (!strcmp(key, "music")) sMusicVol = v;
             else if (!strcmp(key, "sfx")) sSfxVol = v;
             else if (!strcmp(key, "difficulty")) sDifficulty = v;
+            else if (!strcmp(key, "debug")) sDebugConsole = v != 0;
         }
         fclose(f);
     }
@@ -4476,7 +4696,7 @@ static void settings_load(void) {
 static void settings_save(void) {
     FILE* f = fopen(SETTINGS_FILE, "w");
     if (!f) return;
-    fprintf(f, "music %d\nsfx %d\ndifficulty %d\n", sMusicVol, sSfxVol, sDifficulty);
+    fprintf(f, "music %d\nsfx %d\ndifficulty %d\ndebug %d\n", sMusicVol, sSfxVol, sDifficulty, sDebugConsole);
     fclose(f);
 }
 
@@ -4858,7 +5078,8 @@ static void draw_hangar_preview(bool loading) {
 // ---- Options and pause: rows of buttons ----
 #define OPT_Y 30
 #define OPT_PITCH 44
-enum { OPT_MUSIC, OPT_SFX, OPT_BACK, OPT_COUNT };
+enum { OPT_MUSIC, OPT_SFX, OPT_DEBUG, OPT_BACK, OPT_COUNT };
+#define OPT_BACK_Y (OPT_Y + 3 * OPT_PITCH + 12)
 enum { PAUSE_RESUME, PAUSE_OPTIONS, PAUSE_MENU, PAUSE_QUIT, PAUSE_COUNT };
 
 static void draw_volume_row(float y, const char* label, int v, bool sel) {
@@ -4986,8 +5207,12 @@ static void draw_options(void) {
     draw_text(8, 6, 0.55f, C2D_Color32(255, 220, 120, 255), "OPTIONS");
     draw_volume_row(OPT_Y, "MUSIC", sMusicVol, sMenuSel == OPT_MUSIC);
     draw_volume_row(OPT_Y + OPT_PITCH, "SOUND", sSfxVol, sMenuSel == OPT_SFX);
-    ftl_button(BOT_W / 2 - 60, OPT_Y + 2 * OPT_PITCH + 20, 120, 34, sMenuSel == OPT_BACK, "BACK");
-    if (sMenuSel == OPT_BACK) focus_border(BOT_W / 2 - 60, OPT_Y + 2 * OPT_PITCH + 20, 120, 34);
+    float dy = OPT_Y + 2 * OPT_PITCH;
+    draw_text(20, dy + 8, 0.5f, sMenuSel == OPT_DEBUG ? C2D_Color32(255, 220, 90, 255) : C2D_Color32(235, 235, 235, 255), "DEBUG CONSOLE");
+    ftl_button(230, dy, 80, 32, sDebugConsole, sDebugConsole ? "ON" : "OFF");
+    draw_text(20, dy + 34, 0.4f, C2D_Color32(150, 160, 175, 255), "In game, SELECT steps through its pages.");
+    ftl_button(BOT_W / 2 - 60, OPT_BACK_Y, 120, 34, sMenuSel == OPT_BACK, "BACK");
+    if (sMenuSel == OPT_BACK) focus_border(BOT_W / 2 - 60, OPT_BACK_Y, 120, 34);
     else focus_border(6, OPT_Y + sMenuSel * OPT_PITCH, BOT_W - 12, 32);
 }
 
@@ -5000,7 +5225,12 @@ static int options_touch(int px, int py, int* delta) {
         if (px >= 270 && px < 310) *delta = 1;
         return *delta ? r : -1;
     }
-    float by = OPT_Y + 2 * OPT_PITCH + 20;
+    float dy = OPT_Y + 2 * OPT_PITCH;
+    if (py >= dy && py < dy + 32 && px >= 230 && px < 310) {
+        *delta = 1;  // a tap toggles it
+        return OPT_DEBUG;
+    }
+    float by = OPT_BACK_Y;
     return py >= by && py < by + 34 && px >= BOT_W / 2 - 60 && px < BOT_W / 2 + 60 ? OPT_BACK : -1;
 }
 
@@ -5033,7 +5263,12 @@ static void save_write(ShipSlots* pl, FtlDat* dat, const AnimDb* db, const NameL
     (void)dat, (void)db, (void)nm, (void)bps, (void)bpCount, (void)index;
     static SaveShip ss;
     save_ship_capture(&ss, &pl->ships[0], &pl->crews[0]);
-    if (save_store(&sRun, &ss)) sSaveExists = true;
+    if (save_store(&sRun, &ss)) {
+        sSaveExists = true;
+        dbglog("saved");
+    } else {
+        dbglog("save failed");
+    }
 }
 
 static bool save_continue(ShipSlots* pl, FtlDat* dat, const AnimDb* db, const NameList* nm, const ShipBlueprint* bps,
@@ -5429,6 +5664,8 @@ int main(void) {
         if (dt > 0.1f) dt = 0.1f;
         lastTime = now;
         sClock = (now - startTime) / 1000.0f;
+        console_frame((float)(now - lastFrameMs));
+        dbglog_clock(sClock);
 #ifdef FTL_TEST
         sTestFrameTime += ((now - lastFrameMs) / 1000.0f - sTestFrameTime) * 0.05f;
         // A scenario's button presses and taps from last frame, then this frame's commands.
@@ -5446,6 +5683,10 @@ int main(void) {
             if (sTestQuit) break;
         }
 #endif
+        if ((down & KEY_SELECT) && console_available()) {
+            sDcMode = console_next(sDcMode);
+            sound_play("hoverBeep");
+        }
         if (sMenu != MENU_NONE) {
             bool touched = (down & KEY_TOUCH) != 0, quitGame = false;
             touchPosition touch = {0};
@@ -5643,6 +5884,7 @@ int main(void) {
                 if (down & KEY_DLEFT) delta = -1;
                 if (down & KEY_DRIGHT) delta = 1;
                 if (delta) row = sMenuSel;
+                if ((down & KEY_A) && sMenuSel == OPT_DEBUG) row = OPT_DEBUG, delta = 1;
                 if (touched) {
                     int td;
                     int t = options_touch(touch.px, touch.py, &td);
@@ -5659,6 +5901,12 @@ int main(void) {
                     if (*v < 0) *v = 0;
                     if (*v > 10) *v = 10;
                     settings_apply();
+                    settings_save();
+                    sound_play("hoverBeep");
+                }
+                if (row == OPT_DEBUG && delta) {
+                    sDebugConsole = !sDebugConsole;
+                    if (!console_available()) sDcMode = DC_OFF;
                     settings_save();
                     sound_play("hoverBeep");
                 }
@@ -5728,6 +5976,7 @@ int main(void) {
                 draw_title_top(sMenu == MENU_PAUSE ? "PAUSED" : sMenu == MENU_OPTIONS ? "OPTIONS" : NULL);
                 if (sMenu == MENU_STATS) draw_stats_top();
             }
+            draw_console_top(NULL, NULL, NULL, NULL, NULL, NULL);
             draw_popup(blueprints, bpCount);
             C2D_TargetClear(bottom, C2D_Color32(8, 10, 20, 255));
             C2D_SceneBegin(bottom);
@@ -5949,11 +6198,10 @@ int main(void) {
             sound_play("hoverBeep");
         }
 #ifdef FTL_TEST
-        // Debug controls, in the test build only: SELECT opens the debug menu.
-        if (down & KEY_SELECT) {
-            debugOpen = !debugOpen;
+        // Debug controls, in the test build only: the console's CHEATS page opens the debug menu.
+        if ((sDcMode == DC_CHEATS) != debugOpen) {
+            debugOpen = sDcMode == DC_CHEATS;
             dbgShip = index;
-            sound_play("hoverBeep");
         }
         // Debug: L+R+B destroys the enemy ship.
         if ((down & KEY_B) && (held & KEY_L) && (held & KEY_R) && foe) {
@@ -6003,7 +6251,7 @@ int main(void) {
                         testEnemy = dbgEnemy;
                         sInRun = sMapOpen = sStoreOpen = false;
                         NEW_FIGHT();
-                        debugOpen = false;
+                        debugOpen = false, sDcMode = DC_OFF;
                     }
                     break;
                 case DBG_DESTROY:
@@ -6062,7 +6310,7 @@ int main(void) {
                         camera_fit(&cam, PLAYER_SHIP, 8, false);
                         camera_fit(&map, PLAYER_SHIP, 8, true);
                         START_RUN();
-                        debugOpen = false;
+                        debugOpen = false, sDcMode = DC_OFF;
                     }
                     break;
             }
@@ -6576,8 +6824,10 @@ int main(void) {
             unsigned lf = linearSpaceFree();
             if (lf < sMinLinearFree) sMinLinearFree = lf;
         }
-        if (debugOpen || sShowMemory) draw_memory_top(ship, foe);
-        if (!debugOpen && !(sInRun && sRun.view.active) && !sStoreOpen && !sShipOpen) draw_skill_panel(crew);
+        console_watch(&combat, foe);
+        draw_console_top(ship, foe, shown, &cam, split ? &ecam : NULL, &combat);
+        bool wideConsole = sDcMode == DC_SYSTEMS || sDcMode == DC_LOG;
+        if (!debugOpen && !wideConsole && !(sInRun && sRun.view.active) && !sStoreOpen && !sShipOpen) draw_skill_panel(crew);
         if (sInRun && sRun.view.active && !debugOpen) draw_event_top(&sRun.view);
         draw_popup(blueprints, bpCount);
         if ((sStoreOpen || sShipOpen) && !debugOpen) draw_info_top();

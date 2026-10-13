@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "dbglog.h"
 #include "xml.h"
 
 const char* const AUG_NAMES[AUG_COUNT] = {
@@ -527,7 +528,7 @@ int ship_room_at(const Ship* s, int tx, int ty) {
 static void load_texture(FtlDat* dat, Texture* t, const char* path) {
     uint32_t size;
     uint8_t* png = ftldat_read(dat, path, &size);
-    if (png) texture_load_png(t, png, size);
+    if (png && !texture_load_png(t, png, size)) dbglog("art failed: %s", path);  // most likely out of memory
     free(png);
 }
 
@@ -539,6 +540,7 @@ static void load_texture_half(FtlDat* dat, Texture* t, const char* path) {
         int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];  // PNG IHDR
         int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
         if (texture_load_png_fit(t, png, size, w / 2 > 0 ? w / 2 : 1, h / 2 > 0 ? h / 2 : 1)) texture_set_smooth(t);
+        else dbglog("art failed: %s", path);
     }
     free(png);
 }

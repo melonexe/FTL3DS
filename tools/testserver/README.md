@@ -30,10 +30,11 @@ Tests every commit in your local repository, on every branch, within a minute of
    `wsl --update` in an administrator PowerShell). In its settings, **Start Docker Desktop when you
    sign in** keeps the server running.
 2. In `tools/testserver/`, copy `.env.example` to `.env` and set the paths: your repository, the
-   folder holding `ftl.dat` (e.g. FTL's Steam folder) and where results go (default `./data`).
+   folder holding `ftl.dat` (e.g. FTL's Steam folder) and where results go (default `./data`), and
+   `HOST_PORT` if 38088 is taken.
    Git ignores both `.env` and `data/`.
 3. From `tools/testserver/`: `docker compose -f docker-compose.local.yml up -d --build`
-4. Open http://localhost:8088.
+4. Open http://localhost:38088. It only listens on this PC, not your network.
 
 Your repository and FTL's folder are mounted read-only: the server tests from its own clone, so it
 never touches your working copy. After changing the server itself, run step 3 again.

@@ -29,6 +29,7 @@
   .s-crash, .s-hung, .s-timeout, .s-invalid { background: #5a1b16; color: #ffb3ab; }
   .s-running, .s-building, .s-testing { background: #182c46; color: var(--run); }
   .s-no-headless { background: #33302a; color: var(--warn); }
+  .s-skipped { background: var(--panel2); color: var(--dim); }
   .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
   .bar > div { height: 100%; background: var(--run); transition: width .5s; }
   table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -74,7 +75,7 @@ let selected = location.hash.slice(1) || null;
 
 function scen(m) {
   const s = m.summary; if (!s) return `<span class="dim">${esc(m.note || "")}</span>`;
-  return `${s.base_passed}/${s.scenarios} passed`;
+  return `${s.base_passed}/${s.scenarios} passed` + (s.skipped ? ` <span class="dim">(${s.skipped} Azahar-only)</span>` : "");
 }
 function sweep(m) {
   const s = m.summary; if (!s) return "";

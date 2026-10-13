@@ -24,6 +24,8 @@
 //   do fire N | breach N              start fires / breaches in N random rooms of our ship
 //   do map                            open the beacon map
 //   do enemydamage                    a bar of damage on every enemy system
+//   do evade N                        the next N shots at our ship miss (a real dodge: piloting and
+//                                     engines learn as if the ship had dodged them)
 //   do lockdown                       our first Crystal uses the lockdown where they stand
 //   do drone NAME                     fit that drone (drone system and reactor raised to run it), power it
 //   shot <name>                       log SHOT <name> and hold still for the PC runner's screenshot
@@ -35,8 +37,14 @@
 //                                     jumpable (beacons we can jump to), jumpfar (... not next door),
 //                                     aug_<NAME> (count fitted), ach_<ID> (0, or 1 + difficulty earned),
 //                                     lockdowns (our rooms locked down), enemyion (enemy systems ionised),
-//                                     enemyevasion, enemydamage (bars of damage on enemy systems)
+//                                     enemyevasion, enemydamage (bars of damage on enemy systems),
+//                                     enemyhulllost (hull the enemy has lost this fight, repairs or not),
+//                                     manned_<system> (1 if someone is at its station),
+//                                     skillmax_<name> (best level reached this run, even by crew since lost),
+//                                     dodges (shots that have missed our ship)
 //   done                              log DONE and quit
+// Every frame, test/invariants.c also checks the rules the game state must always obey and logs
+// "ERROR invariant: ..." if one stays broken.
 {
     double tv(const char* n) {  // a game value by name (GCC nested function)
         const Ship* ps = PLAYER_SHIP;
@@ -76,6 +84,10 @@
         if (!strcmp(n, "packcount")) return sPack.count;
         if (!strcmp(n, "bgloadms")) return sBgJob.loadMs;  // the last background's load time
         if (!strcmp(n, "planetloadms")) return sPlanetJob.loadMs;
+        if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
+        if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
+        if (!strcmp(n, "enemyhulllost")) return sTestFoeHullLost;  // hull the enemy has lost this fight, repairs or not
+        if (!strcmp(n, "mapopen")) return sMapOpen;
         if (!strcmp(n, "paused")) return paused;
         if (!strcmp(n, "linearfree")) return linearSpaceFree() / 1048576.0;
         if (!strcmp(n, "soundmb") || !strcmp(n, "soundheapmb") || !strcmp(n, "sounds")) {  // decoded effects
@@ -86,6 +98,12 @@
         }
         if (!strcmp(n, "textures")) return texB / 1048576.0;
         if (!strcmp(n, "run")) return sInRun;
+        if (!strncmp(n, "skillmax_", 9)) {  // the best level reached this run in that skill, even by crew since lost
+            static const char* const sk[SKILL_COUNT] = {"pilot", "engines", "shields", "weapons", "repair", "combat"};
+            for (int k = 0; k < SKILL_COUNT; k++)
+                if (!strcmp(n + 9, sk[k])) return sTestSkillMax[k];
+            return -1;
+        }
         if (!strncmp(n, "skill_", 6)) {  // the best level any of our crew has in that skill
             static const char* const sk[SKILL_COUNT] = {"pilot", "engines", "shields", "weapons", "repair", "combat"};
             int best = 0;
@@ -109,6 +127,17 @@
         if (!strcmp(n, "preloaded")) return sPreloadFor != NULL;  // an enemy ship built during the last jump
         if (!strcmp(n, "fires")) return life_ship_fires(ps);
         if (!strcmp(n, "intruders")) return crew_foreign_count(PLAYER_CREW);
+        if (!strcmp(n, "opendoors") || !strcmp(n, "openairlocks")) {  // doors the player has opened
+            bool airlocks = n[4] == 'a';
+            int k = 0;
+            for (int i = 0; i < ps->doorCount; i++)
+                if (ps->doorState[i].forced && (ps->doors[i].roomA < 0 || ps->doors[i].roomB < 0) == airlocks) k++;
+            return k;
+        }
+        if (!strncmp(n, "manned_", 7)) {  // someone at that system's station: 1, no: 0, no such system: -1
+            int si = ship_find_system(ps, system_from_name(n + 7));
+            return si >= 0 ? ps->systems[si].manned : -1;
+        }
         if (!strncmp(n, "cap_", 4)) {  // a system's event limit (<status>): -1 none, -2 no such system
             int si = ship_find_system(ps, system_from_name(n + 4));
             return si >= 0 ? ps->systems[si].eventCap : -2;
@@ -297,8 +326,14 @@
             } else if (!strcmp(a1, "enemydamage") && es) {  // a bar of damage on every enemy system
                 for (int k = 0; k < es->systemCount; k++)
                     if (es->systems[k].damage < es->systems[k].def->level) es->systems[k].damage++;
+            } else if (!strcmp(a1, "break")) {  // one of our systems fully damaged: do break pilot
+                int si = ship_find_system(ps, system_from_name(a2));
+                if (si >= 0) ps->systems[si].damage = ps->systems[si].def->level;
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
             else if (!strcmp(a1, "stereo")) sTestSlider = n1 / 100.0f;  // 3D slider, percent
+            else if (!strcmp(a1, "evade")) gTestEvade = n1;  // the next N shots at our ship miss (the game's dodge, XP and all)
+            else if (!strcmp(a1, "opendoors")) life_set_all_doors(ps, true);  // the open all button
+            else if (!strcmp(a1, "closedoors")) life_set_all_doors(ps, false);
             else if (!strcmp(a1, "store") && sInRun) {  // this beacon's store (stocked if new) on tab n1
                 run_store_enter(&sRun, RCTX);
                 sStoreOpen = true;

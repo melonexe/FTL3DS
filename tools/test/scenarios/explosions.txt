@@ -1,7 +1,10 @@
 # Hit explosions: the Kestrel's Burst Laser (powered first: the reactor can't run both weapons) on
 # autofire at the enemy's shields room; screenshots spaced out as volleys land (each holds 1.5 s).
-# The enemy's systems take damage first: against two shield layers and 25% evasion, a 3-shot
-# volley only reaches the hull if all three hit, so 50 s could pass with no hull damage at all.
+# Against two shield layers and 25% evasion a 3-shot volley only reaches the hull if all three hit,
+# and the enemy's crew repairs its shields, so the enemy's systems start four bars down: that
+# leaves the shields broken long enough for the first volleys to land (41 of 41 seeds headless).
+# The check is the hull it's lost in all (enemyhulllost): its repair drone mends the hull, so its
+# current hull says little.
 ship 1
 enemy REBEL_FAT
 enemyfire 0
@@ -12,9 +15,11 @@ at 1 do target 1 weapons
 at 1 do autofire 1
 at 1 do enemydamage
 at 1 do enemydamage
+at 1 do enemydamage
+at 1 do enemydamage
 at 13.6 shot hits_a
 at 26.4 shot hits_b
 at 38.6 shot hits_c
 at 50 log state
-at 50 expect enemyhull < 9
+at 50 expect enemyhulllost > 0
 at 51 done

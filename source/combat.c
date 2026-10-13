@@ -494,6 +494,10 @@ static void manning_xp(Combat* c, int side, int sysType, int skill) {
 
 static const Combat* sCombat;  // for evasion queries from the UI
 
+#ifdef FTL_TEST
+int gTestEvade, gTestDodges;
+#endif
+
 static int evasion_base(const Combat* c, const Ship* s);
 
 static int evasion(const Combat* c, const Ship* s) {
@@ -533,22 +537,25 @@ static int evasion_base(const Combat* c, const Ship* s) {
 
 int combat_evasion(const Ship* s) { return evasion(sCombat, s); }
 
-bool combat_can_charge_ftl(const Combat* c, int side) {
+int combat_ftl_block(const Combat* c, int side) {
     const Ship* s = c->ship[side];
-    if (!s) return false;
+    if (!s) return FTL_NO_ENGINES;
     int eng = ship_find_system(s, SYS_ENGINES), pil = ship_find_system(s, SYS_PILOT);
-    if (eng < 0 || pil < 0 || ship_system_power(s, eng) <= 0 || ship_system_capacity(s, pil) <= 0) return false;
-    if (s->hackPulse > 0.0f && (s->hackedSys == eng || s->hackedSys == pil)) return false;
-    if (s->bp->enemy && s->bp->crewKinds == 0) return true;  // auto-ship
+    if (eng < 0 || ship_system_power(s, eng) <= 0) return FTL_NO_ENGINES;
+    if (pil < 0 || ship_system_capacity(s, pil) <= 0) return FTL_NO_PILOTING;
+    if (s->hackPulse > 0.0f && (s->hackedSys == eng || s->hackedSys == pil)) return FTL_HACKED;
+    if (s->bp->enemy && s->bp->crewKinds == 0) return FTL_OK;  // auto-ship
     const CrewSet* cs = c->crew[side];
     for (int i = 0; i < cs->count; i++) {
         const Crew* m = &cs->crew[i];
         if (!m->foreign && !m->drone && m->stun <= 0.0f && m->mind <= 0.0f &&
             ship_room_at(s, (int)floorf(m->x / TILE), (int)floorf(m->y / TILE)) == s->systems[pil].room)
-            return true;
+            return FTL_OK;
     }
-    return false;
+    return FTL_NO_PILOT;
 }
+
+bool combat_can_charge_ftl(const Combat* c, int side) { return combat_ftl_block(c, side) == FTL_OK; }
 
 bool combat_cloak(Combat* c, int side) {
     Ship* s = c->ship[side];
@@ -992,6 +999,13 @@ static void resolve(Combat* c, Projectile* p) {
         if (!p->miss && now > p->evade && r < (now - p->evade) / (float)(100 - p->evade)) p->miss = true;
         else if (p->miss && now < p->evade && r < (p->evade - now) / (float)p->evade) p->miss = false;
     }
+#ifdef FTL_TEST
+    if (side == SIDE_PLAYER && !p->shotDown && gTestEvade > 0 && !p->miss) {  // "do evade N": the next N shots miss
+        p->miss = true;
+        gTestEvade--;
+    }
+    if (side == SIDE_PLAYER && !p->shotDown && p->miss) gTestDodges++;
+#endif
     if (p->shotDown) {  // a defence drone got it
         add_effect(c, side, FX_EXPLOSION, p->tx, p->ty);
         return;

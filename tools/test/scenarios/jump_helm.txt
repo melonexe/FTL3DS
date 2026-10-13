@@ -1,0 +1,15 @@
+# FTL won't jump without a working, manned helm, in a fight or not (xftl openJumpMap: isFtlReady &&
+# canChargeFTL). Break the piloting system at a quiet beacon: JUMP refuses (with the reason shown)
+# until the pilot, still at the helm, has repaired it.
+ship 1
+enemyfire 0
+tab crew
+at 0.5 do closeevents
+at 2 expect canjump == 1
+at 2.5 do break pilot
+at 3 expect canjump == 0
+at 3.2 do tap 60 8
+at 3.4 shot refused
+at 3.6 expect mapopen == 0
+at 30 expect canjump == 1
+at 31 done

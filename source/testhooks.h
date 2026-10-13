@@ -27,6 +27,8 @@
 //   at 7 log state               log a line of game state
 //   at 8 expect <value> <op> <n> log PASS or FAIL (op: == != < <= > >=)
 //   at 9 done                    log DONE and quit
+// Every frame the state is also checked against invariants (test/invariants.c): a rule broken for
+// half a second logs "ERROR invariant: ...".
 // Everything is logged to sdmc:/3ds/ftl3ds/test.log. tools/test/run_scenario.ps1 runs a scenario
 // in Azahar, takes the screenshots and prints the log.
 

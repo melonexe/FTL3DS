@@ -25,6 +25,9 @@
 #include "run.h"
 #include "save.h"
 #include "testhooks.h"
+#ifdef FTL_TEST
+#include "invariants.h"
+#endif
 #include "text.h"
 
 #define TOP_W 400
@@ -906,7 +909,8 @@ static void sync_augs(Ship* ps, CrewSet* pc, CrewSet* ec) {
         sLifeSense = !pc->crew[i].foreign && !strcmp(pc->races[pc->crew[i].race].name, "slug");
 }
 static ShipBlueprint sEnemyBp;  // the current enemy, generated from its blueprint for the sector (FTL's generator)
-static bool sCanJump;   // the JUMP button works: no fight, or the FTL drive is charged mid-fight
+static bool sCanJump;   // the JUMP button works: the FTL drive is charged and able to jump
+static int sFtlBlock;   // FTL_* from combat_ftl_block: what's stopping a charged drive
 static bool sFighting;  // an enemy is here and the fight is on
 static bool sMapOpen, sStoreOpen;
 static bool sSectorMapOpen;  // choosing the next sector
@@ -1051,7 +1055,7 @@ static int selected_crystal(const CrewSet* cs) {
     return sel >= 0 && !cs->crew[sel].drone && !strcmp(cs->races[cs->crew[sel].race].name, "crystal") ? sel : -1;
 }
 
-// A short message over the bottom of the crew map (e.g. "Crew stations saved") for a moment.
+// A short message over the bottom of the touch screen (e.g. "Crew stations saved") for a moment.
 #define TOAST_TIME 1.8f
 static char sToast[48];
 static float sToastAt = -100.0f;
@@ -2283,6 +2287,9 @@ static void sys_tab_touch(Ship* player, Combat* c, int px, int py) {
 static float sTestClock, sTestHold;  // seconds since start; screenshot hold left
 static float sTestFrameTime = 1 / 60.0f;  // seconds a frame, averaged over about a second
 static bool sTestQuit;
+static const Ship* sTestFoeSeen;              // the enemy whose hull loss is being added up
+static int sTestFoeHullLast, sTestFoeHullLost;  // its hull last frame; all the hull it's lost (repairs don't undo it)
+static int sTestSkillMax[SKILL_COUNT];          // the best level our crew have reached in each skill (deaths don't undo it)
 static u32 sTestKeys;                 // buttons a scenario presses next frame
 static bool sTestTap, sTestTapNow;    // a scenario's touch: pending, and this frame's
 static u16 sTestTapX, sTestTapY;
@@ -5824,9 +5831,13 @@ int main(void) {
                 sSaveExists = false;
             }
         }
+        // FTL jumps only with the engines powered and someone at the working helm, in a fight or not
+        // (xftl PlayerShipUI.openJumpMap: isFtlReady && canChargeFTL).
+        sFtlBlock = combat_ftl_block(&combat, SIDE_PLAYER);
         sCanJump = sInRun && combat.result != COMBAT_LOST && !(sRun.over && sRun.won) && sJumpTime < 0.0f &&
                    // Not while a win is waiting to pay out (its reward comes ~4 s after the kill).
-                   (!haveEnemy ? sFtlCharge >= 1.0f : (combat.result == COMBAT_FIGHTING && sFtlCharge >= 1.0f));
+                   (!haveEnemy ? sFtlCharge >= 1.0f : (combat.result == COMBAT_FIGHTING && sFtlCharge >= 1.0f)) &&
+                   sFtlBlock == FTL_OK;
         // The jump itself happens at the white flash.
         if (sJumpTime >= 0.0f) {
             float before = sJumpTime;
@@ -6057,7 +6068,7 @@ int main(void) {
                 sStoreTab = 0;
                 sStoreSel = -1;
                 sInfoTitle[0] = '\0';
-            } else if (t >= 0 && run_can_jump(&sRun, t)) {
+            } else if (t >= 0 && run_can_jump(&sRun, t) && sCanJump) {  // the helm can break with the map open
                 sMapOpen = false;
                 sound_play("jumpLeave");
                 sJumpTarget = t;
@@ -6073,7 +6084,7 @@ int main(void) {
                 sSectorMapOpen = false;
                 sMapOpen = true;
                 sound_play("hoverBeep");
-            } else if (t == SMAP_JUMP && sRun.fuel > 0) {
+            } else if (t == SMAP_JUMP && sRun.fuel > 0 && sCanJump) {
                 sSectorMapOpen = false;
                 sNextRow = sSectorPick;
                 sound_play("jumpLeave");
@@ -6191,6 +6202,9 @@ int main(void) {
                         sound_play("hoverBeep");
                     } else {
                         sound_play("powerUpFail");
+                        static const char* const why[] = {NULL, "Engines need power to jump", "Piloting must be repaired to jump",
+                                                          "Piloting must be manned to jump", "Hacked: can't jump"};
+                        if (sFtlBlock != FTL_OK) toast(why[sFtlBlock]);
                     }
                 } else if (touch.px >= PAUSE_X && touch.px < PAUSE_X + PAUSE_W && combat.result != COMBAT_LOST) {
                     paused = !paused;
@@ -6436,6 +6450,21 @@ int main(void) {
         CrewSet* shownCrew = foe ? foeCrew : shown ? &enemy.crews[enemy.cur] : NULL;
         if (shown && !foe && !frozen) crew_update(shownCrew, shown, dt);
         update_visibility(ship, crew, shown, shownCrew);
+#ifdef FTL_TEST
+        test_invariants(sTestClock, ship, crew, foe, foeCrew, sInRun ? &sRun : NULL);  // rules the state must obey
+        if (foe != sTestFoeSeen) {
+            sTestFoeSeen = foe;
+            sTestFoeHullLost = 0;
+        } else if (foe && foe->hullHp < sTestFoeHullLast) {
+            sTestFoeHullLost += sTestFoeHullLast - foe->hullHp;
+        }
+        sTestFoeHullLast = foe ? foe->hullHp : 0;
+        for (int i = 0; i < crew->count; i++)
+            for (int k = 0; k < SKILL_COUNT; k++) {
+                int l = crew_skill_level(crew, &crew->crew[i], k);
+                if (!crew->crew[i].foreign && l > sTestSkillMax[k]) sTestSkillMax[k] = l;
+            }
+#endif
         check_achievements(&combat, ship, crew, foe, foeCrew);
         popup_update(dt, blueprints, bpCount);
 
@@ -6532,7 +6561,6 @@ int main(void) {
         } else if (tab == TAB_CREW) {
             draw_backdrop(&sRun, 0, 0, BOT_W, BOT_H, 0.5f);
             draw_crew_tab(ship, crew, &map);
-            draw_toast();
             draw_effects(&combat, SIDE_PLAYER, &map);
             draw_beams(&combat, SIDE_PLAYER, &map);
             draw_drones(&combat, SIDE_PLAYER, &map);
@@ -6581,8 +6609,10 @@ int main(void) {
         } else {
             draw_power_tab(ship);
         }
-        if (debugOpen || !((sInRun && sRun.view.active) || sMapOpen || sSectorMapOpen || sStoreOpen || sShipOpen))
+        if (debugOpen || !((sInRun && sRun.view.active) || sMapOpen || sSectorMapOpen || sStoreOpen || sShipOpen)) {
             draw_tabs(ship, tab, index, bpCount, paused);
+            if (!debugOpen) draw_toast();  // crew stations saved, why we can't jump...
+        }
         if (sound_error() && now - startTime < 8000) {
             C2D_DrawRectSolid(0, TAB_H, 0, BOT_W, 14, C2D_Color32(90, 30, 30, 255));
             draw_text(4, TAB_H + 1, 0.4f, C2D_Color32(255, 220, 220, 255), sound_error());

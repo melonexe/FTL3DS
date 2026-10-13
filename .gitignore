@@ -47,3 +47,6 @@ FTL2CIA.log
 
 # Backdrop packs: FTL art, encoded (tools/cia/make_backdrops.py)
 *.pak
+# The test server on this PC: its paths and its results
+tools/testserver/.env
+tools/testserver/data/

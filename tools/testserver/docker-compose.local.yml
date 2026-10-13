@@ -1,0 +1,30 @@
+# FTL3DS test server on your own PC (Docker Desktop): tests every commit in your local repository,
+# on every branch, as soon as you make it. No pushing needed.
+#
+#   copy .env.example to .env and set the paths in it, then from this folder:
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# Then open http://localhost:38088 (HOST_PORT in .env). It starts with Docker Desktop.
+services:
+  ftl3ds-tests:
+    build: .
+    image: ftl3ds-tests:latest
+    container_name: ftl3ds-tests
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HOST_PORT:-38088}:8080"  # this PC only; an uncommon port, clear of Hyper-V's reserved ranges
+    volumes:
+      - ${REPO_DIR}:/repo:ro               # your repository: only read (the server tests from its own clone)
+      - ${FTL_DIR}:/ftl:ro                 # the folder holding your ftl.dat
+      - ${DATA_DIR:-./data}:/data          # results and the server's clone
+    environment:
+      REPO_URL: /repo
+      FTL_DAT: /ftl/ftl.dat
+      BRANCHES: "*"                        # every branch; or e.g. "main,experimental/stereo-3d"
+      POLL_MINUTES: "1"
+      SEEDS: "10"
+      KEEP_RUNS: "300"
+    deploy:
+      resources:
+        limits:
+          cpus: "4"                        # leave the rest of the PC alone

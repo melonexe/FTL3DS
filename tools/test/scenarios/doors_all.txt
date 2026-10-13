@@ -1,0 +1,13 @@
+# The open all / close all door buttons, as FTL: the first open opens the inside doors only, a second
+# opens the airlocks too, and close shuts everything.
+ship 1
+enemyfire 0
+at 1 do opendoors
+at 1.5 expect opendoors > 0
+at 1.5 expect openairlocks == 0
+at 2 do opendoors
+at 2.5 expect openairlocks > 0
+at 3 do closedoors
+at 3.5 expect opendoors == 0
+at 3.5 expect openairlocks == 0
+at 4 done

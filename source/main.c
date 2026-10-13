@@ -24,6 +24,9 @@
 #include "run.h"
 #include "save.h"
 #include "testhooks.h"
+#ifdef FTL_TEST
+#include "invariants.h"
+#endif
 #include "text.h"
 
 #define TOP_W 400
@@ -2177,6 +2180,8 @@ static void sys_tab_touch(Ship* player, Combat* c, int px, int py) {
 static float sTestClock, sTestHold;  // seconds since start; screenshot hold left
 static float sTestFrameTime = 1 / 60.0f;  // seconds a frame, averaged over about a second
 static bool sTestQuit;
+static const Ship* sTestFoeSeen;              // the enemy whose hull loss is being added up
+static int sTestFoeHullLast, sTestFoeHullLost;  // its hull last frame; all the hull it's lost (repairs don't undo it)
 static u32 sTestKeys;                 // buttons a scenario presses next frame
 static bool sTestTap, sTestTapNow;    // a scenario's touch: pending, and this frame's
 static u16 sTestTapX, sTestTapY;
@@ -6256,6 +6261,16 @@ int main(void) {
         CrewSet* shownCrew = foe ? foeCrew : shown ? &enemy.crews[enemy.cur] : NULL;
         if (shown && !foe && !frozen) crew_update(shownCrew, shown, dt);
         update_visibility(ship, crew, shown, shownCrew);
+#ifdef FTL_TEST
+        test_invariants(sTestClock, ship, crew, foe, foeCrew, sInRun ? &sRun : NULL);  // rules the state must obey
+        if (foe != sTestFoeSeen) {
+            sTestFoeSeen = foe;
+            sTestFoeHullLost = 0;
+        } else if (foe && foe->hullHp < sTestFoeHullLast) {
+            sTestFoeHullLost += sTestFoeHullLast - foe->hullHp;
+        }
+        sTestFoeHullLast = foe ? foe->hullHp : 0;
+#endif
         check_achievements(&combat, ship, crew, foe, foeCrew);
         popup_update(dt, blueprints, bpCount);
 

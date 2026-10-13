@@ -10,8 +10,9 @@ A small Docker app that tests every new commit automatically and shows the resul
    headless build existed shows **no-headless** until `main` is merged into it.
 3. It runs every scenario in [`tools/test/scenarios`](../test/scenarios) as written (these must
    pass), plus a **seed sweep**: each scenario again with seeds 1..N. A scenario's checks are
-   written for its own seed, so a failed check in the sweep is only a warning (amber); a crash or a
-   run that never finishes is an error (red).
+   written for its own seed, so a failed check in the sweep is only a warning (amber); a crash, a
+   run that never finishes, or a broken **invariant** (a rule the game state must always obey,
+   checked every frame: see BUILDING.md) is an error (red).
 4. The page shows live progress, the latest result per branch, every run with its logs, and each
    scenario's history across runs (handy for spotting flaky tests).
 

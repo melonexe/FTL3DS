@@ -8,7 +8,8 @@
 Each scenario (tools/test/scenarios/*.txt) runs once as written: that's the "base" run, and its
 checks must pass, as in Azahar. --seeds N adds N "sweep" runs with the seed replaced (1..N). A
 scenario's checks are written for its own seed, so a sweep's failed check is only a warning; a
-sweep that crashes or never finishes is an error.
+run that crashes, never finishes or breaks an invariant (test/invariants.c: rules the game state
+must always obey, checked every frame) is an error, in the sweep too.
 
 Every run gets its own SD card folder; ftl.dat is shared read-only (it's read as romfs:/ftl.dat).
 Time inside the game is simulated, so runs are repeatable and take seconds. Screenshots ("shot")
@@ -29,6 +30,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
+SERIOUS = ("crash", "hung", "timeout", "invalid")  # errors even in a seed sweep
 LINE = re.compile(r"\[\s*([\d.]+)\]\s+(PASS|FAIL|ERROR|DONE|SHOT|STATE)\b(.*)")
 
 
@@ -75,7 +77,7 @@ def run_one(game, romfs, name, text, seed, wall_timeout):
     shutil.rmtree(work, ignore_errors=True)
 
     counts = {"PASS": 0, "FAIL": 0, "ERROR": 0}
-    done, sim = False, 0.0
+    done, sim, invariants = False, 0.0, 0
     for ln in log.splitlines():
         m = LINE.search(ln)
         if not m:
@@ -86,8 +88,12 @@ def run_one(game, romfs, name, text, seed, wall_timeout):
             counts[kind] += 1
         if kind == "DONE":
             done = True
+        if kind == "ERROR" and m.group(3).lstrip().startswith("invariant:"):
+            invariants += 1
     if status is None:
-        if not done:
+        if invariants:
+            status = "invalid"  # the game got into a state it never should
+        elif not done:
             status = "hung"  # ran out of simulated time without reaching "done"
         elif counts["FAIL"] or counts["ERROR"]:
             status = "fail"
@@ -95,7 +101,7 @@ def run_one(game, romfs, name, text, seed, wall_timeout):
             status = "pass"
     return {
         "scenario": name, "seed": seed, "kind": "base" if seed is None else "sweep", "status": status,
-        "passed": counts["PASS"], "failed": counts["FAIL"], "errors": counts["ERROR"],
+        "passed": counts["PASS"], "failed": counts["FAIL"], "errors": counts["ERROR"], "invariants": invariants,
         "sim_seconds": round(sim, 2), "wall_seconds": round(wall, 2), "log": log, "stderr": stderr[-4000:],
     }
 
@@ -152,7 +158,7 @@ def main():
                 print(f"{r['scenario']}: {tag}", flush=True)
 
     results.sort(key=lambda r: (r["scenario"], r["seed"] is not None, r["seed"] or 0))
-    bad = [r for r in results if (r["kind"] == "base" and r["status"] != "pass") or r["status"] in ("crash", "hung", "timeout")]
+    bad = [r for r in results if (r["kind"] == "base" and r["status"] != "pass") or r["status"] in SERIOUS]
     base = [r for r in results if r["kind"] == "base"]
     print(f"{sum(r['status'] == 'pass' for r in base)}/{len(base)} scenarios passed, "
           f"{len(results) - len(base)} sweep runs, {len(bad)} problems, {time.time() - t0:.1f} s")

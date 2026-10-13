@@ -35,8 +35,11 @@
 //                                     jumpable (beacons we can jump to), jumpfar (... not next door),
 //                                     aug_<NAME> (count fitted), ach_<ID> (0, or 1 + difficulty earned),
 //                                     lockdowns (our rooms locked down), enemyion (enemy systems ionised),
-//                                     enemyevasion, enemydamage (bars of damage on enemy systems)
+//                                     enemyevasion, enemydamage (bars of damage on enemy systems),
+//                                     enemyhulllost (hull the enemy has lost this fight, repairs or not)
 //   done                              log DONE and quit
+// Every frame, test/invariants.c also checks the rules the game state must always obey and logs
+// "ERROR invariant: ..." if one stays broken.
 {
     double tv(const char* n) {  // a game value by name (GCC nested function)
         const Ship* ps = PLAYER_SHIP;
@@ -72,6 +75,7 @@
         if (!strcmp(n, "env")) return sEnvNow;
         if (!strcmp(n, "ftl")) return sFtlCharge;
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
+        if (!strcmp(n, "enemyhulllost")) return sTestFoeHullLost;  // hull the enemy has lost this fight, repairs or not
         if (!strcmp(n, "mapopen")) return sMapOpen;
         if (!strcmp(n, "paused")) return paused;
         if (!strcmp(n, "linearfree")) return linearSpaceFree() / 1048576.0;

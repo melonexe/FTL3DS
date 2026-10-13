@@ -155,7 +155,20 @@ python3 tools/test/run_headless.py --dat /path/to/ftl.dat [--filter 'boss*'] [--
 
 Each scenario runs as written (its checks must pass, as in Azahar); `--seeds N` adds a seed sweep,
 each scenario again with seeds 1..N. Checks are written for a scenario's own seed, so a failed check
-in the sweep is only a warning; a crash or a run that never reaches `done` is an error. Screenshots
+in the sweep is only a warning; a crash, a run that never reaches `done`, or a broken invariant is
+an error.
+
+**Invariants.** Both test builds (Azahar and headless) check the whole game state after every
+frame against rules it must always obey ([test/invariants.c](test/invariants.c)): hull within its
+maximum, power in use within the reactor, shield layers within what the shields' power gives,
+system damage/repair/ion values in range, oxygen 0–100% in every room, fires and breaches only
+inside rooms, weapon charge within its cooldown, door states, crew health within their race's
+maximum and crew standing inside the ship, slots not overfilled (ours), scrap/fuel/missiles/parts
+not negative, the run's sector and beacon valid, and no NaN or infinite values anywhere. A rule
+that stays broken for half a second (the game may break one for a frame by design, e.g. between
+damage and the power it takes away) logs `ERROR invariant: <rule> (<whose>): <values>` once;
+NaNs count at once. So every run, in every seed of a sweep, checks hundreds of thousands of game
+states, not just its scenario's few `expect`s. Screenshots
 (`shot`) are skipped, there's no sound, and `fps`/memory values are placeholders: what you see or
 hear still needs Azahar or a console.
 

@@ -26,7 +26,7 @@
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .s-passed, .s-pass { background: #183a24; color: var(--pass); }
   .s-failed, .s-fail, .s-build-failed, .s-error { background: #43201d; color: var(--fail); }
-  .s-crash, .s-hung, .s-timeout { background: #5a1b16; color: #ffb3ab; }
+  .s-crash, .s-hung, .s-timeout, .s-invalid { background: #5a1b16; color: #ffb3ab; }
   .s-running, .s-building, .s-testing { background: #182c46; color: var(--run); }
   .s-no-headless { background: #33302a; color: var(--warn); }
   .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
@@ -40,7 +40,7 @@
   .msg { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dots { display: flex; gap: 2px; flex-wrap: wrap; }
   .dot { width: 9px; height: 9px; border-radius: 2px; background: var(--line); cursor: pointer; }
-  .dot.pass { background: var(--pass); } .dot.fail { background: var(--warn); } .dot.crash, .dot.hung, .dot.timeout { background: var(--fail); }
+  .dot.pass { background: var(--pass); } .dot.fail { background: var(--warn); } .dot.crash, .dot.hung, .dot.timeout, .dot.invalid { background: var(--fail); }
   pre { background: #0a0d13; border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; font: 12px/1.4 var(--mono); white-space: pre-wrap; }
   .pass-t { color: var(--pass); } .fail-t { color: var(--fail); } .shot-t { color: var(--dim); }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -82,6 +82,7 @@ function sweep(m) {
   if (s.sweep_failed) bits.push(`<span style="color:var(--warn)">${s.sweep_failed} checks off</span>`);
   if (s.crashes) bits.push(`<span style="color:var(--fail)">${s.crashes} crashes</span>`);
   if (s.hangs) bits.push(`<span style="color:var(--fail)">${s.hangs} hangs</span>`);
+  if (s.invalid) bits.push(`<span style="color:var(--fail)">${s.invalid} broke invariants</span>`);
   return bits.join(" · ");
 }
 

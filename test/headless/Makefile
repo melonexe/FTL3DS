@@ -7,7 +7,7 @@
 
 CC      ?= gcc
 ROOT    := $(abspath $(CURDIR)/../..)
-GAME    := $(filter-out $(ROOT)/source/sound.c,$(wildcard $(ROOT)/source/*.c)) $(ROOT)/test/testmode.c
+GAME    := $(filter-out $(ROOT)/source/sound.c,$(wildcard $(ROOT)/source/*.c)) $(wildcard $(ROOT)/test/*.c)
 PC      := $(CURDIR)/stubs.c $(CURDIR)/sound_stub.c $(CURDIR)/pcfs.c
 OUT     := $(CURDIR)/build/ftl3ds_headless
 OBJDIR  := $(CURDIR)/build/obj

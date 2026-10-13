@@ -9,12 +9,15 @@ source/ ──make──────────► ftl3ds.elf + ftl3ds.3dsx ─
                                                     ├─► build_installer.sh ──────► dist/FTL2CIA.exe   (players make their own CIA)
                                                     └─► release.sh <version> ───► dist/ftl3ds-<version>.zip
 source/ + test/ ──make TEST=1──► ftl3ds_test.3dsx ──► run_scenario.ps1 / run_all.ps1  (automated tests in Azahar)
+source/ + test/ ──make -C test/headless──► ftl3ds_headless ──► run_headless.py  (the same tests on a PC, no emulator)
+                                                                    └─► tools/testserver  (every new commit, web page)
 ```
 
 | Pipeline | Command | Output | Needs |
 |---|---|---|---|
 | [1. Game](#1-the-game-make) | `make` | `ftl3ds.elf`, `ftl3ds.3dsx` | devkitPro |
 | [2. Test build](#2-the-test-build-make-test1) | `make TEST=1` | `ftl3ds_test.3dsx` | devkitPro, Azahar, your `ftl.dat` |
+| [Headless tests](#headless-tests) | `make -C test/headless` | `test/headless/build/ftl3ds_headless` | Linux or Docker (gcc, libpng, zlib), Python, your `ftl.dat` |
 | [3. Personal CIA](#3-personal-cia) | `sh tools/cia/build_cia.sh "<ftl.dat>"` | `ftl3ds.cia` (~280 MB) | 1, Python, makerom, bannertool |
 | [4. Public CIA](#4-public-cia) | `PUBLIC=1 sh tools/cia/build_cia.sh` | `ftl3ds_public.cia` (~0.7 MB) | 1, Python, makerom, bannertool |
 | [5. FTL2CIA](#5-ftl2cia) | `sh tools/installer/build_installer.sh` | `dist/FTL2CIA.exe` (~32 MB) | 1, Python + PyInstaller, makerom, bannertool |
@@ -138,6 +141,40 @@ at 4 done
 `jumpms` / `shiploadms` (how long the beacon change and the arriving ship's load took). Note that
 the emulator models CPU time but not GPU cost.
 
+### Headless tests
+
+The same scenarios also run without Azahar, on a PC or server: [test/headless](test/headless)
+builds the test build for Linux with stand-ins for the 3DS libraries. Nothing is drawn or played,
+input comes from the scenario, and the clock is simulated (one 60 Hz frame at a time), so runs are
+repeatable and take a fraction of a second each: the whole suite runs in a couple of seconds.
+
+```
+make -C test/headless                                   # gcc, libpng and zlib (Linux, or Docker)
+python3 tools/test/run_headless.py --dat /path/to/ftl.dat [--filter 'boss*'] [--seeds 20] [--json out.json]
+```
+
+Each scenario runs as written (its checks must pass, as in Azahar); `--seeds N` adds a seed sweep,
+each scenario again with seeds 1..N. Checks are written for a scenario's own seed, so a failed check
+in the sweep is only a warning; a crash or a run that never reaches `done` is an error. Screenshots
+(`shot`) are skipped, there's no sound, and `fps`/memory values are placeholders: what you see or
+hear still needs Azahar or a console.
+
+`ftl.dat` is read as `romfs:/ftl.dat` from the folder it's in, and each run gets its own temporary
+SD card folder (`FTL3DS_ROMFS` and `FTL3DS_SDMC`). If the game starts using a 3DS function the
+stand-ins don't have (`test/headless/include/3ds.h`, `test/headless/stubs.c`), the headless build
+fails to compile: add a stand-in in the same commit.
+
+On Windows, without Linux, run it in Docker:
+
+```
+docker build -t ftl3ds-tests tools/testserver
+docker run --rm -v "<repo>:/src" -v "<folder with ftl.dat>:/ftl:ro" -w /src ftl3ds-tests     sh -c "make -C test/headless && python3 tools/test/run_headless.py --dat /ftl/ftl.dat"
+```
+
+[tools/testserver](tools/testserver/README.md) does this automatically for every new commit on the
+branches it watches, and shows the results in a web page; it's a Docker app made to run on a home
+server (e.g. TrueNAS).
+
 ## 3. Personal CIA
 
 ```
@@ -246,6 +283,9 @@ From any shell with Python:
 | A HOME Menu banner doesn't update | The HOME Menu caches banners: reboot, or reinstall the CIA |
 
 ## Automatic builds (not set up)
+
+Tests already run automatically: see [Headless tests](#headless-tests) and
+[tools/testserver](tools/testserver/README.md). Builds don't yet:
 
 A GitHub Actions workflow could run steps 1, 4, 5 and 6 whenever a version tag is pushed and attach
 the zip to the release, so binaries never live in git but are always fresh. devkitPro publishes a

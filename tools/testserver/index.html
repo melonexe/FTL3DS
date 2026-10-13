@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FTL3DS Tests</title>
+<style>
+  :root {
+    --bg: #0e1118; --panel: #171c27; --panel2: #1e2533; --line: #2c3547; --text: #dde3ee; --dim: #8b96aa;
+    --pass: #5fd07a; --fail: #ff6b5e; --warn: #f2c14e; --run: #5aa9ff; --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 18px 20px 10px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  h2 { font-size: 15px; margin: 22px 0 10px; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
+  main { padding: 0 20px 40px; max-width: 1200px; }
+  .dim { color: var(--dim); }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .warnbox { background: #3a2a12; border: 1px solid #6b4b1c; padding: 10px 14px; border-radius: 8px; margin: 10px 0; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--run); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .s-passed, .s-pass { background: #183a24; color: var(--pass); }
+  .s-failed, .s-fail, .s-build-failed, .s-error { background: #43201d; color: var(--fail); }
+  .s-crash, .s-hung, .s-timeout { background: #5a1b16; color: #ffb3ab; }
+  .s-running, .s-building, .s-testing { background: #182c46; color: var(--run); }
+  .s-no-headless { background: #33302a; color: var(--warn); }
+  .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+  .bar > div { height: 100%; background: var(--run); transition: width .5s; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; background: var(--panel2); }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--panel2); }
+  tr.sel td { background: #1d2a3d; }
+  .msg { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dots { display: flex; gap: 2px; flex-wrap: wrap; }
+  .dot { width: 9px; height: 9px; border-radius: 2px; background: var(--line); cursor: pointer; }
+  .dot.pass { background: var(--pass); } .dot.fail { background: var(--warn); } .dot.crash, .dot.hung, .dot.timeout { background: var(--fail); }
+  pre { background: #0a0d13; border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; font: 12px/1.4 var(--mono); white-space: pre-wrap; }
+  .pass-t { color: var(--pass); } .fail-t { color: var(--fail); } .shot-t { color: var(--dim); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 640px) { .msg { max-width: 160px; } th:nth-child(5), td:nth-child(5) { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>FTL3DS Tests</h1>
+  <span class="dim" id="cfg"></span>
+  <button id="poll" title="Check GitHub for new commits now">Check for commits</button>
+</header>
+<main>
+  <div id="warn"></div>
+  <div id="now"></div>
+  <h2>Branches</h2>
+  <div class="cards" id="branches"></div>
+  <h2>Runs</h2>
+  <div class="scroll"><table id="runs"><thead><tr><th>Status</th><th>Branch</th><th>Commit</th><th>Scenarios</th><th>Seed sweep</th><th>When</th><th>Took</th></tr></thead><tbody></tbody></table></div>
+  <div id="detail"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const ago = t => { if (!t) return ""; const s = Date.now() / 1000 - t; return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
+const dur = m => m.finished ? Math.round(m.finished - m.started) + " s" : "";
+const badge = s => `<span class="badge s-${esc(s)}">${esc(s)}</span>`;
+const api = (p, o) => fetch(p, o).then(r => r.ok ? (r.headers.get("content-type").includes("json") ? r.json() : r.text()) : Promise.reject(r.status));
+let selected = location.hash.slice(1) || null;
+
+function scen(m) {
+  const s = m.summary; if (!s) return `<span class="dim">${esc(m.note || "")}</span>`;
+  return `${s.base_passed}/${s.scenarios} passed`;
+}
+function sweep(m) {
+  const s = m.summary; if (!s) return "";
+  const bits = [`${s.sweep_passed}/${s.sweep_runs}`];
+  if (s.sweep_failed) bits.push(`<span style="color:var(--warn)">${s.sweep_failed} checks off</span>`);
+  if (s.crashes) bits.push(`<span style="color:var(--fail)">${s.crashes} crashes</span>`);
+  if (s.hangs) bits.push(`<span style="color:var(--fail)">${s.hangs} hangs</span>`);
+  return bits.join(" · ");
+}
+
+async function refresh() {
+  let st;
+  try { st = await api("/api/state"); } catch (e) { $("#now").innerHTML = `<div class="warnbox">Can't reach the server.</div>`; return; }
+  const c = st.config;
+  $("#cfg").textContent = `${c.seeds} seeds per scenario · ${c.jobs} at a time · checks GitHub every ${c.poll_minutes} min`;
+  $("#warn").innerHTML = (st.dat ? "" : `<div class="warnbox">No <b>ftl.dat</b> in the data folder: put your copy there (it's read-only to the tests, never in the image).</div>`)
+    + (st.poll.error ? `<div class="warnbox">GitHub check failed: ${esc(st.poll.error)}</div>` : "");
+  const cur = st.current;
+  if (cur) {
+    const p = cur.progress, pct = p && p.total ? Math.round(100 * p.done / p.total) : 0;
+    $("#now").innerHTML = `<div class="card"><h3><span>${badge(cur.phase)} ${esc(cur.branch)} <span class="mono dim">${esc(cur.sha.slice(0, 7))}</span></span><span class="dim">${ago(cur.started)}</span></h3>
+      <div class="dim msg">${esc(cur.message)}</div>
+      <div class="bar"><div style="width:${cur.phase === "building" ? 5 : pct}%"></div></div>
+      <div class="dim">${cur.phase === "building" ? "Building the headless game…" : p ? `${p.done} / ${p.total} runs` : "Starting…"}${st.queue.length ? ` · queued: ${st.queue.map(q => esc(q.branch)).join(", ")}` : ""}</div></div>`;
+  } else {
+    $("#now").innerHTML = st.queue.length ? `<div class="card dim">Queued: ${st.queue.map(q => esc(q.branch)).join(", ")}</div>` : "";
+  }
+  $("#branches").innerHTML = c.branches.map(b => {
+    const m = st.latest[b];
+    return `<div class="card"><h3><span>${esc(b)}</span><button data-run="${esc(b)}">Run now</button></h3>
+      ${m ? `<div class="row">${badge(m.status)} <span class="mono dim">${esc(m.sha.slice(0, 7))}</span> <span class="dim">${ago(m.started)}</span></div>
+      <div class="msg dim" title="${esc(m.message)}">${esc(m.message)}</div><div>${scen(m)}</div><div class="dim">${sweep(m)}</div>` : `<div class="dim">Not tested yet.</div>`}</div>`;
+  }).join("");
+  const runs = await api("/api/runs?limit=60");
+  $("#runs tbody").innerHTML = runs.map(m => `<tr class="click ${m.id === selected ? "sel" : ""}" data-id="${esc(m.id)}">
+    <td>${badge(m.status)}</td><td>${esc(m.branch)}</td>
+    <td><span class="mono">${esc(m.sha.slice(0, 7))}</span> <div class="msg dim" title="${esc(m.message)}">${esc(m.message)}</div></td>
+    <td>${scen(m)}</td><td>${sweep(m)}</td><td class="dim">${ago(m.started)}</td><td class="dim">${dur(m)}</td></tr>`).join("")
+    || `<tr><td colspan="7" class="dim">No runs yet.</td></tr>`;
+}
+
+async function showRun(id) {
+  selected = id; location.hash = id;
+  document.querySelectorAll("#runs tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
+  let d;
+  try { d = await api(`/api/runs/${encodeURIComponent(id)}`); } catch (e) { $("#detail").innerHTML = ""; return; }
+  const m = d.meta, byScen = {};
+  for (const r of d.results) (byScen[r.scenario] ||= []).push(r);
+  const rows = Object.entries(byScen).map(([name, rs]) => {
+    const base = rs.find(r => r.kind === "base"), sw = rs.filter(r => r.kind === "sweep");
+    return `<tr><td><b>${esc(name)}</b> <a href="#" data-hist="${esc(name)}" class="dim" style="font-size:12px">history</a></td>
+      <td>${base ? `<a href="#" data-log="${esc(name)}|">${badge(base.status)}</a> <span class="dim">${base.passed} check${base.passed === 1 ? "" : "s"}${base.failed ? `, ${base.failed} failed` : ""}</span>` : ""}</td>
+      <td><div class="dots">${sw.map(r => `<span class="dot ${r.status}" title="seed ${r.seed}: ${r.status}" data-log="${esc(name)}|${r.seed}"></span>`).join("")}</div></td>
+      <td class="dim">${base ? base.sim_seconds + " s game, " + base.wall_seconds + " s real" : ""}</td></tr>`;
+  }).join("");
+  $("#detail").innerHTML = `<h2>Run ${esc(m.sha.slice(0, 7))} on ${esc(m.branch)}</h2>
+    <div class="card"><div class="row">${badge(m.status)} <span>${esc(m.message)}</span></div>
+      <div class="dim">${esc(m.author)} · ${esc(m.date)} · ${esc(m.reason)} · ${m.seeds} seeds</div>
+      ${m.note ? `<pre>${esc(m.note)}</pre>` : ""}
+      <div class="row" style="margin-top:8px"><button data-file="build.log">Build log</button><button data-file="runner.log">Runner output</button></div></div>
+    ${rows ? `<div class="scroll" style="margin-top:12px"><table><thead><tr><th>Scenario</th><th>As written</th><th>Seed sweep</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+    <div id="logbox"></div>`;
+}
+
+function colour(log) {
+  return esc(log).split("\n").map(l => / PASS /.test(l) ? `<span class="pass-t">${l}</span>` : / (FAIL|ERROR) /.test(l) ? `<span class="fail-t">${l}</span>` : / SHOT /.test(l) ? `<span class="shot-t">${l}</span>` : l).join("\n");
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-run],[data-id],[data-log],[data-file],[data-hist],#poll");
+  if (!t) return;
+  e.preventDefault();
+  if (t.id === "poll") { await api("/api/poll", {method: "POST"}); setTimeout(refresh, 3000); return; }
+  if (t.dataset.run) { await api("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({branch: t.dataset.run})}); refresh(); return; }
+  if (t.dataset.id) return showRun(t.dataset.id);
+  if (t.dataset.log !== undefined) {
+    const [name, seed] = t.dataset.log.split("|");
+    const log = await api(`/api/runs/${encodeURIComponent(selected)}/log?scenario=${encodeURIComponent(name)}&seed=${seed}`).catch(() => "No log.");
+    $("#logbox").innerHTML = `<h2>${esc(name)} ${seed ? "(seed " + esc(seed) + ")" : "(as written)"}</h2><pre>${colour(log)}</pre>`;
+    $("#logbox").scrollIntoView({behavior: "smooth"});
+  }
+  if (t.dataset.file) {
+    const txt = await api(`/api/runs/${encodeURIComponent(selected)}/${t.dataset.file}`).catch(() => "None.");
+    $("#logbox").innerHTML = `<h2>${esc(t.dataset.file)}</h2><pre>${esc(txt)}</pre>`;
+  }
+  if (t.dataset.hist) {
+    const h = await api(`/api/history/${encodeURIComponent(t.dataset.hist)}`);
+    $("#logbox").innerHTML = `<h2>${esc(t.dataset.hist)}: recent runs</h2><table><thead><tr><th>Run</th><th>As written</th><th>Seed sweep</th></tr></thead><tbody>${
+      h.map(x => `<tr class="click" data-id="${esc(x.id)}"><td>${esc(x.branch)} <span class="mono dim">${esc(x.sha)}</span></td><td>${badge(x.base)}</td><td><div class="dots">${x.sweep.map(s => `<span class="dot ${s}"></span>`).join("")}</div></td></tr>`).join("")}</tbody></table>`;
+  }
+});
+
+refresh();
+if (selected) showRun(selected);
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>

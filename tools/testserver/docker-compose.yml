@@ -1,0 +1,27 @@
+# FTL3DS test server. On TrueNAS SCALE: Apps > Discover Apps > (three dots) Install via YAML, paste
+# this, and change the volume's left side to your dataset. See tools/testserver/README.md.
+services:
+  ftl3ds-tests:
+    # Built straight from GitHub: nothing to copy to the NAS. (Locally: "build: ." from this folder.)
+    build: https://github.com/melonexe/FTL3DS.git#main:tools/testserver
+    image: ftl3ds-tests:latest
+    container_name: ftl3ds-tests
+    restart: unless-stopped
+    ports:
+      - "8088:8080"            # web page: http://<nas>:8088
+    volumes:
+      # Your dataset: put ftl.dat here. The server keeps its clone of the repository and the test
+      # results here too. ftl.dat is never copied into the image.
+      - /mnt/pool/apps/ftl3ds-tests:/data
+    environment:
+      BRANCHES: "main,experimental/stereo-3d"
+      POLL_MINUTES: "10"       # how often to check GitHub for new commits (0: only the Run buttons)
+      SEEDS: "10"              # extra runs per scenario with other random seeds
+      # JOBS: "4"              # tests at a time (default: every CPU the container sees)
+      KEEP_RUNS: "200"
+    # Keep it light on the NAS: at most two CPUs and 2 GB.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g

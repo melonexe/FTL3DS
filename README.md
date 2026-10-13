@@ -157,8 +157,8 @@ from FTL's files out of the repository.
 | `source/ftldat.c` | `ftl.dat` (PKG) archive reader |
 | `source/system.c` | System types, subsystems and default stations |
 | `source/feats.h`, `source/env.h` | Achievement bookkeeping; hazards and difficulty |
-| `test/` | The test build's scenario runner (`make TEST=1` only) |
-| `tools/` | CIA and release scripts, FTL2CIA, scenario runner, PC tools |
+| `test/` | The test build's scenario runner (`make TEST=1` only); `test/headless/` builds it for a PC, with nothing drawn |
+| `tools/` | CIA and release scripts, FTL2CIA, scenario runners (Azahar and headless), the test server, PC tools |
 
 ## Licences
 

@@ -1038,8 +1038,14 @@ static void draw_tabs(const Ship* s, int tab, int index, int count, bool paused)
             ftl_button(JUMPBTN_X, 1, JUMPBTN_W, TAB_H - 1, true, "JUMP");
         } else {
             // Charging: the FTL drive's progress under the label.
-            ftl_button(JUMPBTN_X, 1, JUMPBTN_W, TAB_H - 1, false, "FTL");
+            ftl_button(JUMPBTN_X, 1, JUMPBTN_W, TAB_H - 1, false, sFtlCharge >= 1.0f ? "JUMP" : "FTL");
             C2D_DrawRectSolid(JUMPBTN_X + 4, TAB_H - 4, 0, (JUMPBTN_W - 8) * sFtlCharge, 2, C2D_Color32(90, 200, 255, 255));
+            if (sFtlBlock != FTL_OK) {  // can't jump (or even charge): helm, engines or a hack. Tap it to hear why.
+                u32 red = C2D_Color32(235, 60, 50, 230);
+                float x0 = JUMPBTN_X + 6, x1 = JUMPBTN_X + JUMPBTN_W - 6, y0 = 3, y1 = TAB_H - 2;
+                C2D_DrawLine(x0, y0, red, x1, y1, red, 2.0f, 0);
+                C2D_DrawLine(x0, y1, red, x1, y0, red, 2.0f, 0);
+            }
         }
     } else {
         char buf[96];
@@ -2226,6 +2232,36 @@ static void draw_sys_tab(const Ship* player, const CrewSet* crew, const Combat* 
     (void)c;
 }
 
+// A special system's own action, as its SYS tab card does it: cloak, battery; hacking, mind control
+// and the teleporter pick a target (the main loop switches to the arms tab for that).
+static void system_activate(Combat* c, int type) {
+    if (type == SYS_TELEPORTER) {
+        if (combat_teleporter_state(c, SIDE_PLAYER) == 0) {
+            pickMode = PICK_TELEPORT;
+            sound_play("hoverBeep");
+        } else {
+            sound_play("powerUpFail");
+        }
+    } else if (type == SYS_HACKING) {
+        if (combat_hack_state(c, SIDE_PLAYER) == HACK_NO_DRONE) {
+            pickMode = PICK_HACK;
+            sound_play("hoverBeep");
+        } else {
+            sound_play(combat_hack_pulse(c, SIDE_PLAYER) ? "powerUpSystem" : "powerUpFail");
+        }
+    } else if (type == SYS_MIND) {
+        if (combat_mind_state(c, SIDE_PLAYER) == MIND_READY) {
+            pickMode = PICK_MIND;
+            sound_play("hoverBeep");
+        } else {
+            sound_play("powerUpFail");
+        }
+    } else if (type == SYS_CLOAKING || type == SYS_BATTERY) {
+        bool ok = type == SYS_CLOAKING ? combat_cloak(c, SIDE_PLAYER) : combat_battery(c, SIDE_PLAYER);
+        sound_play(ok ? "powerUpSystem" : "powerUpFail");
+    }
+}
+
 static void sys_tab_touch(Ship* player, Combat* c, int px, int py) {
     for (int i = 0; i < player->droneCount; i++) {
         float x = wcard_x(i), w = wcard_w();
@@ -2251,37 +2287,150 @@ static void sys_tab_touch(Ship* player, Combat* c, int px, int py) {
             card_button(x, SYS_ROW2, w, SYS_CARD_H, &bx, &by, &bw, &bh);
             if (py >= by) {
                 sound_play(combat_teleport_return(c, SIDE_PLAYER) ? "powerUpSystem" : "powerUpFail");
-            } else if (combat_teleporter_state(c, SIDE_PLAYER) == 0) {
-                pickMode = PICK_TELEPORT;  // the main loop switches to the arms tab
-                sound_play("hoverBeep");
-            } else {
-                sound_play("powerUpFail");
+                return;
             }
-            return;
         }
-        if (type == SYS_HACKING) {
-            int st = combat_hack_state(c, SIDE_PLAYER);
-            if (st == HACK_NO_DRONE) {
-                pickMode = PICK_HACK;
-                sound_play("hoverBeep");
-            } else {
-                sound_play(combat_hack_pulse(c, SIDE_PLAYER) ? "powerUpSystem" : "powerUpFail");
-            }
-            return;
-        }
-        if (type == SYS_MIND) {
-            if (combat_mind_state(c, SIDE_PLAYER) == MIND_READY) {
-                pickMode = PICK_MIND;
-                sound_play("hoverBeep");
-            } else {
-                sound_play("powerUpFail");
-            }
-            return;
-        }
-        bool ok = type == SYS_CLOAKING ? combat_cloak(c, SIDE_PLAYER) : type == SYS_BATTERY ? combat_battery(c, SIDE_PLAYER) : false;
-        if (type == SYS_CLOAKING || type == SYS_BATTERY) sound_play(ok ? "powerUpSystem" : "powerUpFail");
+        system_activate(c, type);
         return;
     }
+}
+
+// ---- Quick bar: on the crew tab, a button for each system you trigger yourself (cloaking, battery,
+// hacking, mind control, teleporter) and then the drones, so they're in view without the SYS tab.
+// Lit: ready. A blue bar running down: active. Dim with seconds: recharging. Tap: as on the SYS tab.
+
+#define QUICK_X (STATIONBTN_X + 2 * (DOORBTN_W + 2) + 4)
+#define QUICK_W 22
+#define QUICK_RIGHT (LOCKBTN_X - 2)  // clear of a Crystal's lockdown button under "all crew"
+#define QUICK_GAP 2
+
+typedef struct {
+    int sys;    // index in systems[], or -1 for a drone
+    int drone;  // index in drones[]
+} QuickItem;
+
+static void draw_sys_icon(const ShipSystem* y, float cx, float cy, float size);
+
+static int quick_items(const Ship* s, QuickItem* out) {
+    static const int order[] = {SYS_CLOAKING, SYS_BATTERY, SYS_HACKING, SYS_MIND, SYS_TELEPORTER};
+    int max = (QUICK_RIGHT - QUICK_X + QUICK_GAP) / (QUICK_W + QUICK_GAP), n = 0;
+    for (size_t k = 0; k < sizeof(order) / sizeof(order[0]) && n < max; k++) {
+        int si = ship_find_system(s, order[k]);
+        if (si >= 0) out[n++] = (QuickItem){si, -1};
+    }
+    for (int i = 0; i < s->droneCount && n < max; i++) out[n++] = (QuickItem){-1, i};
+    return n;
+}
+
+// A drone's 26x26 FTL icon (weapbox_icon_D_<iconImage>), loaded once per kind.
+static const Texture* quick_drone_icon(const DroneDef* d) {
+    static struct {
+        const DroneDef* def;
+        Texture tex;
+    } cache[12];
+    for (int i = 0; i < 12; i++) {
+        if (cache[i].def == d) return cache[i].tex.loaded ? &cache[i].tex : NULL;
+        if (!cache[i].def) {
+            cache[i].def = d;
+            char path[80];
+            snprintf(path, sizeof(path), "img/systemUI/weapbox_icon_D_%s.png", d->icon);
+            if (d->icon[0]) load_crop(&cache[i].tex, path, 0, 0, 0, 0, false);
+            return cache[i].tex.loaded ? &cache[i].tex : NULL;
+        }
+    }
+    return NULL;
+}
+
+// One button's state: ready to use, active (with the share left, 0..1, or -1), seconds of recharge.
+static void quick_state(const Ship* s, const CrewSet* cs, const Combat* c, QuickItem q, bool* ready, float* active, int* wait) {
+    *ready = false;
+    *active = -1.0f;
+    *wait = 0;
+    if (q.sys < 0) {
+        const DroneSlot* d = &s->drones[q.drone];
+        if (d->powered) *active = 1.0f;
+        else if (d->redeploy > 0.0f) *wait = (int)ceilf(d->redeploy);
+        else *ready = drone_supported(d->def) && (d->deployed || s->droneParts > 0);
+        return;
+    }
+    const ShipSystem* y = &s->systems[q.sys];
+    int type = y->def->type;
+    if (y->ionTimer > 0.0f) *wait = (int)ceilf(y->ionTimer);
+    if (type == SYS_CLOAKING) {
+        if (s->cloakTime > 0.0f) *active = s->cloakTime / (y->power > 0 ? y->power * 5.0f : 5.0f);
+        else *ready = !*wait && y->power > 0;
+    } else if (type == SYS_BATTERY) {
+        if (s->batteryTime > 0.0f) *active = s->batteryTime / 30.0f;
+        else *ready = !*wait && ship_system_capacity(s, q.sys) > 0;
+    } else if (type == SYS_HACKING) {
+        int st = combat_hack_state(c, SIDE_PLAYER);
+        if (st == HACK_PULSING && c->ship[SIDE_ENEMY])
+            *active = c->ship[SIDE_ENEMY]->hackPulse / (1.0f + 3.0f * ship_system_power(s, q.sys));
+        *ready = st == HACK_READY || st == HACK_NO_DRONE;
+    } else if (type == SYS_MIND) {
+        *ready = combat_mind_state(c, SIDE_PLAYER) == MIND_READY;
+    } else if (type == SYS_TELEPORTER) {
+        *ready = combat_teleporter_state(c, SIDE_PLAYER) == 0;
+        if (c->crew[SIDE_ENEMY] && crew_foreign_count(c->crew[SIDE_ENEMY]) > 0) *active = 1.0f;  // crew over there
+    }
+    (void)cs;
+}
+
+static void draw_quick_bar(const Ship* s, const CrewSet* cs, const Combat* c) {
+    QuickItem items[8];
+    int n = quick_items(s, items);
+    for (int k = 0; k < n; k++) {
+        float x = QUICK_X + k * (QUICK_W + QUICK_GAP), y = DOORBTN_Y;
+        bool ready;
+        float active;
+        int wait;
+        quick_state(s, cs, c, items[k], &ready, &active, &wait);
+        bool picking = items[k].sys >= 0 && ((s->systems[items[k].sys].def->type == SYS_TELEPORTER && pickMode == PICK_TELEPORT) ||
+                                             (s->systems[items[k].sys].def->type == SYS_HACKING && pickMode == PICK_HACK) ||
+                                             (s->systems[items[k].sys].def->type == SYS_MIND && pickMode == PICK_MIND));
+        u32 edge = picking ? C2D_Color32(255, 220, 90, 255) : active >= 0.0f ? C2D_Color32(110, 190, 255, 255)
+                   : ready ? C2D_Color32(120, 220, 120, 255) : C2D_Color32(70, 80, 98, 255);
+        C2D_DrawRectSolid(x, y, 0, QUICK_W, QUICK_W, edge);
+        C2D_DrawRectSolid(x + 1.5f, y + 1.5f, 0, QUICK_W - 3, QUICK_W - 3, C2D_Color32(24, 30, 42, 240));
+        if (items[k].sys >= 0) {
+            draw_sys_icon(&s->systems[items[k].sys], x + QUICK_W * 0.5f, y + QUICK_W * 0.5f - (active >= 0.0f ? 1 : 0), 16);
+        } else {
+            const Texture* t = quick_drone_icon(s->drones[items[k].drone].def);
+            if (t) C2D_DrawImageAt(t->image, x + (QUICK_W - t->width * 0.75f) * 0.5f, y + (QUICK_W - t->height * 0.75f) * 0.5f, 0, NULL, 0.75f, 0.75f);
+        }
+        if (!ready && active < 0.0f) C2D_DrawRectSolid(x + 1.5f, y + 1.5f, 0, QUICK_W - 3, QUICK_W - 3, C2D_Color32(10, 12, 18, 150));  // dim
+        if (active >= 0.0f) {  // what's left of it
+            float a = active > 1.0f ? 1.0f : active;
+            C2D_DrawRectSolid(x + 3, y + QUICK_W - 5, 0, (QUICK_W - 6) * a, 2, C2D_Color32(110, 190, 255, 255));
+        }
+        if (wait > 0) {
+            char num[12];
+            snprintf(num, sizeof(num), "%d", wait);
+            draw_text_centred(x, y + 6, QUICK_W, 0.4f, C2D_Color32(235, 235, 235, 255), num);
+        }
+    }
+}
+
+// True if the tap was on the quick bar (and it's been dealt with).
+static bool quick_bar_touch(Ship* s, Combat* c, int px, int py) {
+    if (py < DOORBTN_Y || py >= DOORBTN_Y + QUICK_W || px < QUICK_X) return false;
+    QuickItem items[8];
+    int n = quick_items(s, items);
+    int k = (px - QUICK_X) / (QUICK_W + QUICK_GAP);
+    if (k >= n || px >= QUICK_X + k * (QUICK_W + QUICK_GAP) + QUICK_W) return false;
+    if (items[k].sys < 0) {
+        bool wasOn = s->drones[items[k].drone].powered;
+        bool ok = combat_toggle_drone(c, SIDE_PLAYER, items[k].drone);
+        sound_play(!ok ? "powerUpFail" : wasOn ? "powerDownSystem" : "powerUpSystem");
+        return true;
+    }
+    int type = s->systems[items[k].sys].def->type;
+    if (!c->ship[SIDE_ENEMY] && (type == SYS_TELEPORTER || type == SYS_HACKING || type == SYS_MIND)) {
+        sound_play("powerUpFail");  // nothing to act on
+        return true;
+    }
+    system_activate(c, type);
+    return true;
 }
 
 // ---- Test hooks ------------------------------------------------------------------------
@@ -6256,6 +6405,8 @@ int main(void) {
             } else if (tab == TAB_SYS) {
                 sys_tab_touch(ship, &combat, touch.px, touch.py);
                 if (pickMode) tab = TAB_ARMS;
+            } else if (tab == TAB_CREW && quick_bar_touch(ship, &combat, touch.px, touch.py)) {
+                if (pickMode) tab = TAB_ARMS;  // hacking, mind control, teleporter: pick the room
             } else if (touch.py >= DOORBTN_Y && touch.py < DOORBTN_Y + DOORBTN_H && touch.px >= DOORBTN_X &&
                        touch.px < DOORBTN_X + 2 * DOORBTN_W + 2) {
                 life_set_all_doors(ship, touch.px < DOORBTN_X + DOORBTN_W);
@@ -6581,6 +6732,7 @@ int main(void) {
         } else if (tab == TAB_CREW) {
             draw_backdrop(&sRun, 0, 0, BOT_W, BOT_H, 0.5f);
             draw_crew_tab(ship, crew, &map);
+            draw_quick_bar(ship, crew, &combat);
             draw_effects(&combat, SIDE_PLAYER, &map);
             draw_beams(&combat, SIDE_PLAYER, &map);
             draw_drones(&combat, SIDE_PLAYER, &map);

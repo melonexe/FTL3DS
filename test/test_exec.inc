@@ -42,7 +42,8 @@
 //                                     enemyhulllost (hull the enemy has lost this fight, repairs or not),
 //                                     manned_<system> (1 if someone is at its station),
 //                                     skillmax_<name> (best level reached this run, even by crew since lost),
-//                                     dodges (shots that have missed our ship), hiddenrooms (our
+//                                     dodges (shots that have missed our ship), cloaked,
+//                                     power_<system> (working power), hiddenrooms (our
 //                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
 //                                     store has a picture for it), enemyguns
 //                                     (enemy weapons powered)
@@ -90,6 +91,11 @@
         if (!strcmp(n, "planetloadms")) return sPlanetJob.loadMs;
         if (!strcmp(n, "canjump")) return sCanJump;  // the JUMP button works
         if (!strcmp(n, "dodges")) return gTestDodges;  // shots that have missed our ship
+        if (!strcmp(n, "cloaked")) return ps->cloakTime > 0.0f;
+        if (!strncmp(n, "power_", 6)) {  // a system's working power: -1 no such system
+            int si = ship_find_system(ps, system_from_name(n + 6));
+            return si >= 0 ? ship_system_power(ps, si) : -1;
+        }
         if (!strncmp(n, "droneart_", 9)) {  // 1 if the store has a picture for that drone blueprint
             int ok = item_art(ITEM_DRONE, n + 9) != NULL;
             item_art_clear();

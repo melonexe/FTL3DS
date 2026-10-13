@@ -1,3 +1,4 @@
+# headless: skip needs backdrops.pak next to ftl.dat (a personal CIA or the SD card) and the 3DS GPU's ETC1 import
 # Backdrops from the pre-encoded pack (tools/cia/make_backdrops.py, saved as backdrops.pak next to
 # ftl.dat on the emulator's SD card): the background and planet come from it, at the start beacon
 # and after a jump. Compare the screenshots with a run without the pack for ETC1's quality.

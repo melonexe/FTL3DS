@@ -2312,7 +2312,7 @@ static int free_tiles(const Ship* s, const CrewSet* cs, int room, int out[][2], 
     int n = 0;
     for (int y = r->y; y < r->y + r->h && n < max; y++)
         for (int x = r->x; x < r->x + r->w && n < max; x++) {
-            bool used = false;
+            bool used = ship_tile_blocked(s, x, y);
             for (int k = 0; k < cs->count && !used; k++) used = cs->crew[k].foreign == foreign && cs->crew[k].destX == x && cs->crew[k].destY == y;
             if (!used) {
                 out[n][0] = x;
@@ -3013,6 +3013,11 @@ void combat_update(Combat* c, float dt) {
         update_shots(c, dt);
         update_repairs(c, SIDE_PLAYER, dt);
         update_brawls(c, SIDE_PLAYER, dt);
+        c->boardTimer -= dt;
+        if (c->boardTimer <= 0.0f) {  // boarders from an event go from system to system too
+            c->boardTimer = 1.0f;
+            boarder_ai(c, SIDE_PLAYER);
+        }
         update_loops(c);
         return;
     }
@@ -3041,12 +3046,14 @@ void combat_update(Combat* c, float dt) {
         update_hack_mind(c, side, dt);
     }
     c->boardTimer -= dt;
-    if (c->boardTimer <= 0.0f && c->result == COMBAT_FIGHTING) {
+    if (c->boardTimer <= 0.0f) {
         c->boardTimer = 1.0f;
-        for (int side = 0; side < 2; side++) {
-            boarder_ai(c, side);
-            crew_drone_ai(c, side);
-        }
+        boarder_ai(c, SIDE_PLAYER);  // boarders left aboard carry on once the fight is over
+    }
+    if (c->boardTimer == 1.0f && c->result == COMBAT_FIGHTING) {
+        crew_drone_ai(c, SIDE_PLAYER);
+        boarder_ai(c, SIDE_ENEMY);
+        crew_drone_ai(c, SIDE_ENEMY);
         enemy_special_ai(c);
         defender_ai(c, SIDE_ENEMY);
         enemy_teleport_ai(c);

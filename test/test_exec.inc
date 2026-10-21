@@ -25,6 +25,7 @@
 //   do map                            open the beacon map
 //   do enemydamage                    a bar of damage on every enemy system
 //   do send N R                       send our crew member N (1-based) to room R
+//   do level <system> N               set our system's capacity (subsystems are powered to match)
 //   do evade N                        the next N shots at our ship miss (a real dodge: piloting and
 //                                     engines learn as if the ship had dodged them)
 //   do lockdown                       our first Crystal uses the lockdown where they stand
@@ -45,7 +46,10 @@
 //                                     dodges (shots that have missed our ship), cloaked,
 //                                     power_<system> (working power), hangarfocus, difficulty,
 //                                     console (debug console page), debugconsole (its option),
-//                                     loglines (lines in its log),
+//                                     roomcrew_<system> (our crew headed for its room),
+//                                     sensors (working sensors level, manned adds 1),
+//                                     loglines (lines in its log), intruderrooms (rooms of
+//                                     ours intruders have stood in),
 //                                     hiddenrooms (our
 //                                     rooms we can't see into), droneart_<BLUEPRINT> (1 if the
 //                                     store has a picture for it), enemyguns
@@ -54,6 +58,12 @@
 // Every frame, test/invariants.c also checks the rules the game state must always obey and logs
 // "ERROR invariant: ..." if one stays broken.
 {
+    static unsigned sIntruderRooms;  // bit per room of ours an intruder has stood in
+    for (int k = 0; k < PLAYER_CREW->count; k++) {
+        const Crew* m = &PLAYER_CREW->crew[k];
+        int r = m->foreign ? ship_room_at(PLAYER_SHIP, (int)floorf(m->x / TILE), (int)floorf(m->y / TILE)) : -1;
+        if (r >= 0 && r < 32) sIntruderRooms |= 1u << r;
+    }
     double tv(const char* n) {  // a game value by name (GCC nested function)
         const Ship* ps = PLAYER_SHIP;
         const Ship* es = ENEMY_SHIP;
@@ -155,6 +165,14 @@
         if (!strcmp(n, "preloaded")) return sPreloadFor != NULL;  // an enemy ship built during the last jump
         if (!strcmp(n, "fires")) return life_ship_fires(ps);
         if (!strcmp(n, "intruders")) return crew_foreign_count(PLAYER_CREW);
+        if (!strcmp(n, "sensors")) return sensor_level(ps);  // working sensors level (manned adds 1)
+        if (!strncmp(n, "roomcrew_", 9)) {  // our crew headed for that system's room, -1 no such system
+            int si = ship_find_system(ps, system_from_name(n + 9)), k = 0;
+            for (int i = 0; si >= 0 && i < PLAYER_CREW->count; i++)
+                k += !PLAYER_CREW->crew[i].foreign && ship_room_at(ps, PLAYER_CREW->crew[i].destX, PLAYER_CREW->crew[i].destY) == ps->systems[si].room;
+            return si >= 0 ? k : -1;
+        }
+        if (!strcmp(n, "intruderrooms")) return __builtin_popcount(sIntruderRooms);  // rooms intruders have stood in
         if (!strcmp(n, "opendoors") || !strcmp(n, "openairlocks")) {  // doors the player has opened
             bool airlocks = n[4] == 'a';
             int k = 0;
@@ -360,6 +378,11 @@
             } else if (!strcmp(a1, "map") && sInRun) sMapOpen = true;
             else if (!strcmp(a1, "send") && n1 >= 1 && n1 <= PLAYER_CREW->count)  // do send <crew#> <room#>
                 crew_order(PLAYER_CREW, ps, n1 - 1, atoi(a3));
+            else if (!strcmp(a1, "level") && ship_find_system(ps, system_from_name(a2)) >= 0) {  // do level <sys> N
+                int si = ship_find_system(ps, system_from_name(a2));
+                ps->sysDefs[si].level = atoi(a3);
+                if (system_is_subsystem(ps->sysDefs[si].type)) ps->systems[si].power = ps->sysDefs[si].level;
+            }
             else if (!strcmp(a1, "evade")) gTestEvade = n1;  // the next N shots at our ship miss (the game's dodge, XP and all)
             else if (!strcmp(a1, "opendoors")) life_set_all_doors(ps, true);  // the open all button
             else if (!strcmp(a1, "closedoors")) life_set_all_doors(ps, false);

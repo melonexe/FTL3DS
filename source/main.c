@@ -1579,6 +1579,26 @@ static void draw_enemy_weapons(const Ship* e, float x, float y, float w) {
     }
 }
 
+// The enemy's weapons by name, each with its charge, in the top screen's top-right corner: for the
+// FIGHT tab, where the enemy ship isn't on the top screen. Sensors level 4 only (manned level 3).
+static void draw_enemy_weapon_list(const Ship* e) {
+    if (!e || e->weaponCount == 0) return;
+    const float W = 138, x = TOP_W - W - 2, y = 2, rowH = 15;
+    C2D_DrawRectSolid(x, y, 0, W, 14 + e->weaponCount * rowH, C2D_Color32(12, 15, 28, 220));
+    draw_text(x + 4, y + 1, 0.4f, C2D_Color32(235, 120, 110, 255), "ENEMY WEAPONS");
+    for (int i = 0; i < e->weaponCount; i++) {
+        const WeaponSlot* ws = &e->weapons[i];
+        float ry = y + 14 + i * rowH, k = ws->fullCharge > 0 ? ws->charge / ws->fullCharge : 0;
+        if (k > 1.0f) k = 1.0f;
+        draw_text_fit_left(x + 4, ry, 0.4f, 78, ws->powered ? C2D_Color32(235, 235, 235, 255) : C2D_Color32(120, 125, 135, 255),
+                           ws->def->shortName[0] ? ws->def->shortName : ws->def->name);
+        C2D_DrawRectSolid(x + 86, ry + 4, 0, 48, 6, C2D_Color32(10, 10, 10, 220));
+        C2D_DrawRectSolid(x + 86, ry + 4, 0, 48 * k, 6, !ws->powered ? C2D_Color32(90, 90, 100, 255)
+                                                      : k >= 1.0f   ? C2D_Color32(235, 80, 60, 255)
+                                                                    : C2D_Color32(235, 170, 60, 255));
+    }
+}
+
 enum { RES_FUEL, RES_MISSILES, RES_DRONES, RES_SCRAP };
 static float draw_resource(float x, float y, int which, int value, bool warn);
 
@@ -4218,7 +4238,7 @@ static bool add_to_room(CrewSet* cs, const Ship* s, int race, const NameList* na
     const Room* r = &s->rooms[room];
     for (int y = r->y; y < r->y + r->h; y++)
         for (int x = r->x; x < r->x + r->w; x++) {
-            if (tile_taken(cs, x, y)) continue;
+            if (tile_taken(cs, x, y) || ship_tile_blocked(s, x, y)) continue;
             int pick = names && names->count ? rand() % names->count : -1;
             return crew_add(cs, race, pick >= 0 ? names->names[pick] : "Rebel", pick >= 0 && names->female[pick], x, y);
         }
@@ -6819,6 +6839,7 @@ int main(void) {
         draw_jump_fx();
         STEREO_DEPTH(STEREO_NEAR);
         draw_top_hud(ship, split ? shown : NULL, &combat, paused);
+        if (tab == TAB_ARMS && foe && sensor_level(ship) >= 4) draw_enemy_weapon_list(foe);
         draw_env_hud(&combat);
         {
             unsigned lf = linearSpaceFree();

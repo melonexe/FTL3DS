@@ -148,8 +148,10 @@ static int race_get(CrewSet* cs, FtlDat* dat, const AnimDb* db, const char* race
 
 // ---- Placement and pathfinding -----------------------------------------------
 
-// A tile holds one crew member from each side, as in FTL (a 2x2 room fits 4 crew and 4 boarders).
-static bool tile_taken(const CrewSet* cs, int x, int y, int except, bool foreign) {
+// A tile holds one crew member from each side, as in FTL (a 2x2 room fits 4 crew and 4 boarders),
+// and none at all where the medbay's equipment stands.
+static bool tile_taken(const CrewSet* cs, const Ship* ship, int x, int y, int except, bool foreign) {
+    if (ship_tile_blocked(ship, x, y)) return true;
     for (int i = 0; i < cs->count; i++)
         if (i != except && cs->crew[i].foreign == foreign && cs->crew[i].destX == x && cs->crew[i].destY == y) return true;
     return false;
@@ -171,11 +173,11 @@ static bool station_in_room(const Ship* ship, int room, int* tx, int* ty) {
 }
 
 static bool free_tile_in_room(const CrewSet* cs, const Ship* ship, int room, int* tx, int* ty) {
-    if (station_in_room(ship, room, tx, ty) && !tile_taken(cs, *tx, *ty, -1, false)) return true;
+    if (station_in_room(ship, room, tx, ty) && !tile_taken(cs, ship, *tx, *ty, -1, false)) return true;
     const Room* r = &ship->rooms[room];
     for (int y = r->y; y < r->y + r->h; y++)
         for (int x = r->x; x < r->x + r->w; x++)
-            if (!tile_taken(cs, x, y, -1, false)) {
+            if (!tile_taken(cs, ship, x, y, -1, false)) {
                 *tx = x;
                 *ty = y;
                 return true;
@@ -318,7 +320,7 @@ static bool crew_order_to(CrewSet* cs, const Ship* ship, int ci, int room, int w
     int bestX = -1, bestY = -1;
     while (head < tail) {
         int x = queue[head][0], y = queue[head++][1];
-        if (bestX < 0 && ship->tileRoom[y][x] == room && !tile_taken(cs, x, y, ci, cs->crew[ci].foreign)) {
+        if (bestX < 0 && ship->tileRoom[y][x] == room && !tile_taken(cs, ship, x, y, ci, cs->crew[ci].foreign)) {
             bestX = x;  // BFS order, so this is the closest free tile
             bestY = y;
         }
@@ -335,12 +337,12 @@ static bool crew_order_to(CrewSet* cs, const Ship* ship, int ci, int room, int w
     if (bestX < 0) return false;
     // Prefer the room's station, as the game does.
     int stX, stY;
-    if (station_in_room(ship, room, &stX, &stY) && dist[stY][stX] >= 0 && !tile_taken(cs, stX, stY, ci, cs->crew[ci].foreign)) {
+    if (station_in_room(ship, room, &stX, &stY) && dist[stY][stX] >= 0 && !tile_taken(cs, ship, stX, stY, ci, cs->crew[ci].foreign)) {
         bestX = stX;
         bestY = stY;
     }
     if (wantX >= 0 && wantX < GRID_MAX && wantY >= 0 && wantY < GRID_MAX && dist[wantY][wantX] >= 0 &&
-        ship->tileRoom[wantY][wantX] == room && !tile_taken(cs, wantX, wantY, ci, cs->crew[ci].foreign)) {
+        ship->tileRoom[wantY][wantX] == room && !tile_taken(cs, ship, wantX, wantY, ci, cs->crew[ci].foreign)) {
         bestX = wantX;
         bestY = wantY;
     }

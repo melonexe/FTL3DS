@@ -91,6 +91,7 @@ static void parse_systems(ShipBlueprint* bp, const char* body, const char* limit
                 xml_attr(p, tagEnd, "weapon", d->weapon, sizeof(d->weapon));
                 xml_attr_int(p, tagEnd, "max", &d->max);
                 system_default_slot(type, &d->slot, &d->slotDir);
+                d->blocked = type == SYS_MEDBAY ? 1 : -1;  // room_medbay.png has its equipment top right
                 const char* e;
                 const char* t;
                 char buf[16];
@@ -103,6 +104,10 @@ static void parse_systems(ShipBlueprint* bp, const char* body, const char* limit
                             if (!strcmp(buf, dirs[i])) d->slotDir = i;
                     }
                 }
+                // A medbay's <slot> is the tile its equipment takes; -2 for none.
+                if (type == SYS_MEDBAY && xml_find_tag_before(tagEnd, bodyEnd, "slot", &e) &&
+                    xml_find_tag_before(tagEnd, bodyEnd, "number", &e) && xml_text(e, buf, sizeof(buf)))
+                    d->blocked = atoi(buf) >= 0 ? atoi(buf) : -1;
                 if (starts)
                     bp->systemCount++;
                 else
@@ -520,6 +525,12 @@ int ship_find_system(const Ship* s, int type) {
     return -1;
 }
 
+bool ship_tile_blocked(const Ship* s, int x, int y) {
+    for (int i = 0; i < s->systemCount; i++)
+        if (s->systems[i].blockedX == x && s->systems[i].blockedY == y) return true;
+    return false;
+}
+
 int ship_room_at(const Ship* s, int tx, int ty) {
     if (tx < 0 || ty < 0 || tx >= GRID_MAX || ty >= GRID_MAX) return -1;
     return s->tileRoom[ty][tx];
@@ -665,6 +676,11 @@ int ship_install_system(Ship* s, FtlDat* dat, const SystemDef* src) {
         if (slot >= 0) {
             sys->stationX = room->x + slot % room->w;
             sys->stationY = room->y + slot / room->w;
+        }
+        sys->blockedX = sys->blockedY = -1;
+        if (d->blocked >= 0 && d->blocked < room->w * room->h) {
+            sys->blockedX = room->x + d->blocked % room->w;
+            sys->blockedY = room->y + d->blocked / room->w;
         }
         if (d->img[0]) {
             snprintf(path, sizeof(path), "img/ship/interior/%s.png", d->img);

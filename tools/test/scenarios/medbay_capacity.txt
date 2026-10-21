@@ -1,0 +1,12 @@
+# The medbay's equipment takes a tile (room_medbay.png: top right; a blueprint's <slot> moves it,
+# -2 for none), so the Kestrel's 2x2 medbay holds 3 crew, as in FTL. The fourth goes elsewhere.
+ship 1
+crew 4
+enemy none
+at 1 do send 1 4
+at 1 do send 2 4
+at 1 do send 3 4
+at 1 do send 4 4
+at 6 expect roomcrew_medbay == 3
+at 6 shot medbay
+at 8 done

@@ -1,0 +1,11 @@
+# Sensors level 4 (level 3, manned) lists the enemy's weapons with their charge on the top screen
+# while the FIGHT tab is open (wiki: Sensors; level 3 alone shows just the charge bars).
+ship 1
+enemy REBEL_FAT
+enemyfire 1
+at 1 do level sensors 3
+at 1 do send 3 3
+at 1 do tab fight
+at 6 expect sensors == 4
+at 6 shot enemy_weapons
+at 8 done

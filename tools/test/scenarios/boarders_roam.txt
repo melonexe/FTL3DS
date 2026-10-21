@@ -1,0 +1,10 @@
+# Boarders from an event (no enemy ship) wreck a system, then move on to the next (they used to
+# stand in the first room for good).
+ship 1
+seed 7
+event MANTIS_BOARDERS
+at 1 expect intruders >= 2
+at 1 do closeevents
+at 120 expect intruderrooms >= 3
+at 120 log state
+at 121 done

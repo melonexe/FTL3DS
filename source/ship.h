@@ -116,6 +116,7 @@ typedef struct {
     int room;              // room index
     int power;             // bars currently powered (always == level for subsystems)
     int stationX, stationY;  // station tile, or -1
+    int blockedX, blockedY;  // a tile nobody can stand on (the medbay's equipment), or -1
     bool manned;
     signed char manCrew;   // who's manning it (index in the ship's own crew), or -1
     signed char manLevel;  // their skill level for this system
@@ -310,6 +311,8 @@ int ship_replace_system(Ship* ship, FtlDat* dat, int idx, const SystemDef* def);
 void ship_free(Ship* ship);
 
 // Room index at a tile, or -1.
+// Whether nobody can stand on tile (x, y): the medbay's equipment takes one of its tiles.
+bool ship_tile_blocked(const Ship* ship, int x, int y);
 int ship_room_at(const Ship* ship, int tx, int ty);
 
 // System in a room, or -1.

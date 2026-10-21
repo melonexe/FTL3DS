@@ -20,6 +20,7 @@ typedef struct {
     char img[32];   // interior image name, e.g. room_pilot_2; empty if none
     int slot;       // station tile, row-major within the room; -1 if not mannable
     int slotDir;    // DIR_* the crew member faces at the station
+    int blocked;    // medbay: the tile its equipment takes (row-major), -1 if none
     char weapon[32]; // artillery: the weapon blueprint it fires
     int max;         // enemies: the most power the generator may give it (0: the system's maximum)
 } SystemDef;
